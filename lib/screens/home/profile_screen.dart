@@ -77,6 +77,40 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  // Generate initials from full name
+  String _getInitials(String fullName) {
+    List<String> names = fullName.trim().split(' ');
+    if (names.isEmpty) return '?';
+    
+    if (names.length == 1) {
+      return names[0].substring(0, 1).toUpperCase();
+    }
+    
+    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1))
+        .toUpperCase();
+  }
+
+  // Generate random color based on name (consistent for same name)
+  Color _getRandomColor(String name) {
+    final colors = [
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.teal,
+      Colors.pink,
+      Colors.indigo,
+      Colors.cyan,
+    ];
+    
+    int hash = 0;
+    for (int i = 0; i < name.length; i++) {
+      hash = name.codeUnitAt(i) + ((hash << 5) - hash);
+    }
+    
+    return colors[hash.abs() % colors.length];
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<AuthBloc, AuthState>(
@@ -167,58 +201,129 @@ class _ProfileScreenState extends State<ProfileScreen>
                         child: Column(
                           children: [
                             const SizedBox(height: 16),
-                            // Cover Photo
-                            if (user.coverPhoto != null)
-                              Container(
-                                height: 150,
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  image: DecorationImage(
-                                    image: CachedImageProvider(
-                                      user.coverPhoto!.url,
+                            // Cover Photo and Profile Section
+                            SizedBox(
+                              width: double.infinity,
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  // Cover Photo or Placeholder
+                                  user.coverPhoto != null
+                                      ? Container(
+                                          height: 120,
+                                          width: double.infinity,
+                                          decoration: BoxDecoration(
+                                            image: DecorationImage(
+                                              image: CachedImageProvider(
+                                                user.coverPhoto!.url,
+                                              ),
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        )
+                                      : Container(
+                                          height: 120,
+                                          width: double.infinity,
+                                          color: Colors.grey[200],
+                                        ),
+
+                                  Positioned(
+                                    left: 16,
+                                    bottom: -80,
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 4,
+                                            ),
+                                          ),
+                                          child: CircleAvatar(
+                                                  radius: 50,
+                                                  backgroundImage:
+                                                      CachedImageProvider(
+                                                    user.profilePicture!.url,
+                                                  ),
+                                                ),
+                                        ),
+                                        const SizedBox(width: 20),
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const SizedBox(height: 30),
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  user.fullName,
+                                                  style: const TextStyle(
+                                                    fontSize: 20,
+                                                    fontWeight:
+                                                        FontWeight.bold,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                if (isOwnProfile)
+                                                  InkWell(
+                                                    onTap: () {
+                                                      Navigator.push(
+                                                        context,
+                                                        MaterialPageRoute(
+                                                          builder: (_) =>
+                                                              EditProfileScreen(
+                                                            user: user,
+                                                          ),
+                                                        ),
+                                                      );
+                                                    },
+                                                    child: const Padding(
+                                                      padding:
+                                                          EdgeInsets.all(4.0),
+                                                      child: Icon(
+                                                        Icons.edit_outlined,
+                                                        size: 16,
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                            Text(
+                                              '@${user.username}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+
+                                            if (user.bio.isNotEmpty) ...[
+                                              const SizedBox(height: 8),
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.only(
+                                                  right: 14,
+                                                ),
+                                                child: Text(
+                                                  user.bio,
+                                                  textAlign: TextAlign.left,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ],
                                     ),
-                                    fit: BoxFit.cover,
                                   ),
-                                ),
-                              ),
-                            const SizedBox(height: 16),
-                            // Profile Picture
-                            CircleAvatar(
-                              radius: 50,
-                              backgroundImage: CachedImageProvider(
-                                user.profilePicture.url,
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            // Name and Username
-                            Text(
-                              user.fullName,
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              '@${user.username}',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                            if (user.bio.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: Text(
-                                  user.bio,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 100),
                             // Stats
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -263,7 +368,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 14),
                             // Action Buttons
                             Padding(
                               padding: const EdgeInsets.symmetric(
@@ -271,22 +376,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ),
                               child: Row(
                                 children: [
-                                  if (isOwnProfile)
-                                    Expanded(
-                                      child: ElevatedButton(
-                                        onPressed: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) =>
-                                                  EditProfileScreen(user: user),
-                                            ),
-                                          );
-                                        },
-                                        child: const Text('Edit Profile'),
-                                      ),
-                                    )
-                                  else ...[
+                                  if (!isOwnProfile)
                                     Expanded(
                                       child: ElevatedButton(
                                         onPressed: _handleFollowToggle,
@@ -307,25 +397,24 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         ),
                                       ),
                                     ),
-                                    if (state.isFollowing &&
-                                        user.accountType != 'business') ...[
-                                      const SizedBox(width: 8),
-                                      ElevatedButton(
-                                        onPressed: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => ChatScreen(
-                                                userId: widget.userId,
-                                              ),
+                                  if (state.isFollowing &&
+                                      user.accountType != 'business') ...[
+                                    const SizedBox(width: 8),
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => ChatScreen(
+                                              userId: widget.userId,
                                             ),
-                                          );
-                                        },
-                                        child: const Icon(
-                                          Icons.chat_bubble_outline,
-                                        ),
+                                          ),
+                                        );
+                                      },
+                                      child: const Icon(
+                                        Icons.chat_bubble_outline,
                                       ),
-                                    ],
+                                    ),
                                   ],
                                 ],
                               ),

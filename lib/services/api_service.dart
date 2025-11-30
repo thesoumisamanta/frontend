@@ -16,9 +16,7 @@ class ApiService {
         baseUrl: AppConstants.apiUrl,
         connectTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(seconds: 30),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
       ),
     );
 
@@ -28,11 +26,7 @@ class ApiService {
 
     // Add logging interceptor for debugging
     _dio.interceptors.add(
-      LogInterceptor(
-        requestBody: true,
-        responseBody: true,
-        error: true,
-      ),
+      LogInterceptor(requestBody: true, responseBody: true, error: true),
     );
   }
 
@@ -77,10 +71,7 @@ class ApiService {
     try {
       final response = await _dio.post(
         '/auth/login',
-        data: {
-          'emailOrUsername': emailOrUsername,
-          'password': password,
-        },
+        data: {'emailOrUsername': emailOrUsername, 'password': password},
       );
       return response.data;
     } catch (e) {
@@ -91,16 +82,14 @@ class ApiService {
   Future<Map<String, dynamic>> refreshToken() async {
     try {
       final refreshToken = await _secureStorage.getRefreshToken();
-      
+
       if (refreshToken == null) {
         throw Exception('No refresh token available');
       }
 
       final response = await _dio.post(
         '/auth/refresh-token',
-        options: Options(
-          headers: {'Cookie': 'refreshToken=$refreshToken'},
-        ),
+        options: Options(headers: {'Cookie': 'refreshToken=$refreshToken'}),
       );
       return response.data;
     } catch (e) {
@@ -164,7 +153,10 @@ class ApiService {
 
   Future<Map<String, dynamic>> searchUsers(String query) async {
     try {
-      final response = await _dio.get('/users/search', queryParameters: {'query': query});
+      final response = await _dio.get(
+        '/users/search',
+        queryParameters: {'query': query},
+      );
       return response.data;
     } catch (e) {
       throw _handleError(e);
@@ -208,7 +200,10 @@ class ApiService {
         formData.files.add(
           MapEntry(
             'media',
-            await MultipartFile.fromFile(file.path, filename: file.path.split('/').last),
+            await MultipartFile.fromFile(
+              file.path,
+              filename: file.path.split('/').last,
+            ),
           ),
         );
       }
@@ -381,7 +376,10 @@ class ApiService {
       formData.files.add(
         MapEntry(
           'media',
-          await MultipartFile.fromFile(mediaFile.path, filename: mediaFile.path.split('/').last),
+          await MultipartFile.fromFile(
+            mediaFile.path,
+            filename: mediaFile.path.split('/').last,
+          ),
         ),
       );
 
@@ -455,17 +453,24 @@ class ApiService {
     try {
       FormData formData = FormData();
       if (text != null) formData.fields.add(MapEntry('text', text));
-      if (sharedPostId != null) formData.fields.add(MapEntry('sharedPostId', sharedPostId));
+      if (sharedPostId != null)
+        formData.fields.add(MapEntry('sharedPostId', sharedPostId));
       if (mediaFile != null) {
         formData.files.add(
           MapEntry(
             'media',
-            await MultipartFile.fromFile(mediaFile.path, filename: mediaFile.path.split('/').last),
+            await MultipartFile.fromFile(
+              mediaFile.path,
+              filename: mediaFile.path.split('/').last,
+            ),
           ),
         );
       }
 
-      final response = await _dio.post('/chats/$chatId/message', data: formData);
+      final response = await _dio.post(
+        '/chats/$chatId/message',
+        data: formData,
+      );
       return response.data;
     } catch (e) {
       throw _handleError(e);
@@ -497,7 +502,10 @@ class ApiService {
   }
 
   // Notification APIs
-  Future<Map<String, dynamic>> getNotifications({int page = 1, int limit = 20}) async {
+  Future<Map<String, dynamic>> getNotifications({
+    int page = 1,
+    int limit = 20,
+  }) async {
     try {
       final response = await _dio.get(
         '/notifications',
@@ -576,5 +584,51 @@ class ApiService {
       }
     }
     return 'An unexpected error occurred';
+  }
+
+  Future<Map<String, dynamic>> updateProfileWithImages({
+    required Map<String, dynamic> data,
+    File? profileImage,
+    File? coverImage,
+  }) async {
+    try {
+      FormData formData = FormData();
+
+      // Add text fields
+      data.forEach((key, value) {
+        formData.fields.add(MapEntry(key, value.toString()));
+      });
+
+      // Add profile image if provided
+      if (profileImage != null) {
+        formData.files.add(
+          MapEntry(
+            'profilePicture',
+            await MultipartFile.fromFile(
+              profileImage.path,
+              filename: profileImage.path.split('/').last,
+            ),
+          ),
+        );
+      }
+
+      // Add cover image if provided
+      if (coverImage != null) {
+        formData.files.add(
+          MapEntry(
+            'coverPhoto',
+            await MultipartFile.fromFile(
+              coverImage.path,
+              filename: coverImage.path.split('/').last,
+            ),
+          ),
+        );
+      }
+
+      final response = await _dio.put('/users/profile', data: formData);
+      return response.data;
+    } catch (e) {
+      throw _handleError(e);
+    }
   }
 }

@@ -38,13 +38,30 @@ class UserBloc extends Bloc<UserEvent, UserState> {
     }
   }
 
-  Future<void> _onUserUpdateProfile(
-    UserUpdateProfile event,
-    Emitter<UserState> emit,
-  ) async {
-    try {
-      emit(UserLoading());
+  // blocs/user/user_bloc.dart
+Future<void> _onUserUpdateProfile(
+  UserUpdateProfile event,
+  Emitter<UserState> emit,
+) async {
+  try {
+    emit(UserLoading());
 
+    // If there are images to upload, use the appropriate API method
+    if (event.profileImage != null || event.coverImage != null) {
+      final response = await apiService.updateProfileWithImages(
+        data: event.data,
+        profileImage: event.profileImage,
+        coverImage: event.coverImage,
+      );
+
+      if (response['success'] == true) {
+        final user = UserModel.fromJson(response['user']);
+        emit(UserProfileUpdated(user));
+      } else {
+        emit(UserError(response['message'] ?? 'Failed to update profile'));
+      }
+    } else {
+      // No images, just update data
       final response = await apiService.updateProfile(event.data);
 
       if (response['success'] == true) {
@@ -53,10 +70,11 @@ class UserBloc extends Bloc<UserEvent, UserState> {
       } else {
         emit(UserError(response['message'] ?? 'Failed to update profile'));
       }
-    } catch (e) {
-      emit(UserError(e.toString()));
     }
+  } catch (e) {
+    emit(UserError(e.toString()));
   }
+}
 
   Future<void> _onUserFollowToggle(
     UserFollowToggle event,

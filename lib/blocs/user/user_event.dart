@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:equatable/equatable.dart';
 
 abstract class UserEvent extends Equatable {
@@ -18,11 +20,17 @@ class UserLoadProfile extends UserEvent {
 
 class UserUpdateProfile extends UserEvent {
   final Map<String, dynamic> data;
+  final File? profileImage;  
+  final File? coverImage;    
 
-  const UserUpdateProfile(this.data);
+  const UserUpdateProfile(
+    this.data, {
+    this.profileImage,
+    this.coverImage,
+  });
 
   @override
-  List<Object?> get props => [data];
+  List<Object?> get props => [data, profileImage, coverImage];
 }
 
 class UserFollowToggle extends UserEvent {
