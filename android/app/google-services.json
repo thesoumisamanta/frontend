@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "592475133016",
+    "project_id": "travel-diary-6a048",
+    "storage_bucket": "travel-diary-6a048.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:592475133016:android:7967d2aa86b7d18fd1e62d",
+        "android_client_info": {
+          "package_name": "com.example.travel_diary"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDgOb9BQZ9y8Dyap0UGpdP7APaJcXd3S1M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
