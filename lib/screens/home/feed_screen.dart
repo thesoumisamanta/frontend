@@ -4,6 +4,7 @@ import '../../blocs/post/post_bloc.dart';
 import '../../blocs/post/post_event.dart';
 import '../../blocs/post/post_state.dart';
 import '../../blocs/story/story_bloc.dart';
+import '../../blocs/story/story_event.dart';
 import '../../blocs/story/story_state.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/story_list.dart';
@@ -23,6 +24,17 @@ class _FeedScreenState extends State<FeedScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    
+    // Load feed when screen initializes
+    _loadInitialData();
+  }
+
+  void _loadInitialData() {
+    // Load posts
+    context.read<PostBloc>().add(const PostLoadFeed(refresh: true));
+    
+    // Load stories
+    context.read<StoryBloc>().add(StoryLoadFollowing());
   }
 
   @override
@@ -43,6 +55,7 @@ class _FeedScreenState extends State<FeedScreen> {
 
   Future<void> _onRefresh() async {
     context.read<PostBloc>().add(const PostLoadFeed(refresh: true));
+    context.read<StoryBloc>().add(StoryLoadFollowing());
   }
 
   @override
@@ -85,6 +98,13 @@ class _FeedScreenState extends State<FeedScreen> {
             // Posts Section
             BlocBuilder<PostBloc, PostState>(
               builder: (context, state) {
+                // Handle initial state - show loading
+                if (state is PostInitial) {
+                  return const SliverFillRemaining(
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
                 if (state is PostLoading) {
                   return const SliverFillRemaining(
                     child: Center(child: CircularProgressIndicator()),
@@ -169,8 +189,21 @@ class _FeedScreenState extends State<FeedScreen> {
                   );
                 }
 
-                return const SliverFillRemaining(
-                  child: Center(child: Text('Something went wrong')),
+                // Fallback for any unknown state
+                return SliverFillRemaining(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('Something went wrong'),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _onRefresh,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               },
             ),

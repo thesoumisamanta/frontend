@@ -1,50 +1,118 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+
 class AppConstants {
-  // API Base URL - Change this to your backend URL
-  static const String baseUrl = 'http://10.0.2.2:5000'; // For Android Emulator
-  // static const String baseUrl = 'http://localhost:5000'; // For iOS Simulator
-  // static const String baseUrl = 'https://your-api.com'; // For Production
+  // Your computer's IP address (from wlo1 interface)
+  static const String _localIp = '192.168.0.104';
   
+  // Cached values
+  static String? _cachedBaseUrl;
+  static bool? _isEmulator;
+  
+  /// Get base URL - automatically detects emulator vs real device
+  static Future<String> getBaseUrl() async {
+    if (_cachedBaseUrl != null) return _cachedBaseUrl!;
+    
+    if (kIsWeb) {
+      _cachedBaseUrl = 'http://localhost:5000';
+      return _cachedBaseUrl!;
+    }
+    
+    // Check if running on emulator
+    _isEmulator ??= await _checkIfEmulator();
+    
+    if (Platform.isAndroid) {
+      _cachedBaseUrl = _isEmulator! 
+          ? 'http://10.0.2.2:5000'      // Android Emulator
+          : 'http://$_localIp:5000';    // Real Android Device
+    } else if (Platform.isIOS) {
+      _cachedBaseUrl = _isEmulator!
+          ? 'http://localhost:5000'     // iOS Simulator
+          : 'http://$_localIp:5000';    // Real iPhone
+    } else {
+      _cachedBaseUrl = 'http://localhost:5000';
+    }
+    
+    // Debug log
+    print('🌐 API URL: $_cachedBaseUrl (${_isEmulator! ? "Emulator" : "Real Device"})');
+    
+    return _cachedBaseUrl!;
+  }
+  
+  /// Synchronous getter (use after calling getBaseUrl() first)
+  static String get baseUrl {
+    if (_cachedBaseUrl == null) {
+      throw Exception('Call AppConstants.getBaseUrl() first in main()!');
+    }
+    return _cachedBaseUrl!;
+  }
+
+  /// Check if running on emulator/simulator
+  static Future<bool> _checkIfEmulator() async {
+    if (Platform.isAndroid) {
+      // Check for emulator characteristics
+      try {
+        final result = await Process.run('getprop', ['ro.kernel.qemu']);
+        return result.stdout.toString().trim() == '1';
+      } catch (e) {
+        // Fallback: check for common emulator indicators
+        final brand = Platform.environment['android.os.Build.BRAND'] ?? '';
+        final model = Platform.environment['android.os.Build.MODEL'] ?? '';
+        return brand.toLowerCase().contains('generic') || 
+               model.toLowerCase().contains('emulator') ||
+               model.toLowerCase().contains('sdk');
+      }
+    }
+    
+    if (Platform.isIOS) {
+      // iOS Simulator detection
+      return Platform.environment.containsKey('SIMULATOR_DEVICE_NAME');
+    }
+    
+    return false;
+  }
+
   // API Endpoints
-  static const String apiUrl = '$baseUrl/api';
-  
+  static String get apiUrl => '$baseUrl/api';
+
   // Auth Endpoints
-  static const String loginEndpoint = '$apiUrl/auth/login';
-  static const String registerEndpoint = '$apiUrl/auth/register';
-  static const String logoutEndpoint = '$apiUrl/auth/logout';
-  static const String getMeEndpoint = '$apiUrl/auth/me';
-  static const String refreshTokenEndpoint = '$apiUrl/auth/refresh-token';
-  static const String updateFCMTokenEndpoint = '$apiUrl/auth/fcm-token';
-  
+  static String get loginEndpoint => '$apiUrl/auth/login';
+  static String get registerEndpoint => '$apiUrl/auth/register';
+  static String get logoutEndpoint => '$apiUrl/auth/logout';
+  static String get getMeEndpoint => '$apiUrl/auth/me';
+  static String get refreshTokenEndpoint => '$apiUrl/auth/refresh-token';
+  static String get updateFCMTokenEndpoint => '$apiUrl/auth/fcm-token';
+
   // User Endpoints
-  static const String getUserProfileEndpoint = '$apiUrl/users/profile';
-  static const String updateProfileEndpoint = '$apiUrl/users/profile';
-  static const String followEndpoint = '$apiUrl/users/follow';
-  static const String searchUsersEndpoint = '$apiUrl/users/search';
-  
+  static String get getUserProfileEndpoint => '$apiUrl/users/profile';
+  static String get updateProfileEndpoint => '$apiUrl/users/profile';
+  static String get followEndpoint => '$apiUrl/users/follow';
+  static String get searchUsersEndpoint => '$apiUrl/users/search';
+
   // Post Endpoints
-  static const String createPostEndpoint = '$apiUrl/posts';
-  static const String getFeedEndpoint = '$apiUrl/posts/feed';
-  static const String getUserPostsEndpoint = '$apiUrl/posts/user';
-  static const String likePostEndpoint = '$apiUrl/posts';
-  static const String dislikePostEndpoint = '$apiUrl/posts';
-  static const String deletePostEndpoint = '$apiUrl/posts';
-  
+  static String get createPostEndpoint => '$apiUrl/posts';
+  static String get getFeedEndpoint => '$apiUrl/posts/feed';
+  static String get getUserPostsEndpoint => '$apiUrl/posts/user';
+  static String get likePostEndpoint => '$apiUrl/posts';
+  static String get dislikePostEndpoint => '$apiUrl/posts';
+  static String get deletePostEndpoint => '$apiUrl/posts';
+
   // Comment Endpoints
-  static const String createCommentEndpoint = '$apiUrl/comments/post';
-  static const String getCommentsEndpoint = '$apiUrl/comments/post';
-  
+  static String get createCommentEndpoint => '$apiUrl/comments/post';
+  static String get getCommentsEndpoint => '$apiUrl/comments/post';
+
   // Story Endpoints
-  static const String createStoryEndpoint = '$apiUrl/stories';
-  static const String getStoriesEndpoint = '$apiUrl/stories/following';
-  
+  static String get createStoryEndpoint => '$apiUrl/stories';
+  static String get getStoriesEndpoint => '$apiUrl/stories/following';
+
   // Chat Endpoints
-  static const String getChatsEndpoint = '$apiUrl/chats';
-  static const String getChatEndpoint = '$apiUrl/chats/user';
-  static const String sendMessageEndpoint = '$apiUrl/chats';
-  
+  static String get getChatsEndpoint => '$apiUrl/chats';
+  static String get getChatEndpoint => '$apiUrl/chats/user';
+  static String get sendMessageEndpoint => '$apiUrl/chats';
+
   // Notification Endpoints
-  static const String getNotificationsEndpoint = '$apiUrl/notifications';
-  
+  static String get getNotificationsEndpoint => '$apiUrl/notifications';
+
   // Secure Storage Keys
   static const String accessTokenKey = 'access_token';
   static const String refreshTokenKey = 'refresh_token';
@@ -52,19 +120,19 @@ class AppConstants {
   static const String usernameKey = 'username';
   static const String emailKey = 'email';
   static const String accountTypeKey = 'account_type';
-  
+
   // Token Configuration
   static const Duration tokenRefreshThreshold = Duration(minutes: 5);
-  
+
   // Pagination
   static const int postsPerPage = 10;
   static const int commentsPerPage = 20;
-  
+
   // Media
   static const int maxImageSize = 5 * 1024 * 1024; // 5MB
   static const int maxVideoSize = 100 * 1024 * 1024; // 100MB
   static const int maxImagesPerPost = 10;
-  
+
   // Story
   static const Duration storyDuration = Duration(seconds: 5);
   static const Duration storyDisplayDuration = Duration(hours: 24);

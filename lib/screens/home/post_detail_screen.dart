@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../blocs/post/post_bloc.dart';
+import '../../blocs/post/post_event.dart';
+import '../../blocs/post/post_state.dart';
 import '../../blocs/comment/comment_bloc.dart';
 import '../../blocs/comment/comment_event.dart';
 import '../../blocs/comment/comment_state.dart';
 import '../../widgets/post_card.dart';
 import '../../widgets/comment_item.dart';
-import '../../services/api_service.dart';
-import '../../models/post_model.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final String postId;
@@ -20,17 +21,20 @@ class PostDetailScreen extends StatefulWidget {
 class _PostDetailScreenState extends State<PostDetailScreen> {
   final TextEditingController _commentController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  PostModel? _post;
-  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadPost();
-    context.read<CommentBloc>().add(
-          CommentLoadPostComments(postId: widget.postId, refresh: true),
-        );
     _scrollController.addListener(_onScroll);
+    
+    // Load data using BLoCs
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // ✅ Use PostBloc to load the single post
+      context.read<PostBloc>().add(PostLoadSingle(widget.postId));
+      context.read<CommentBloc>().add(
+        CommentLoadPostComments(postId: widget.postId, refresh: true),
+      );
+    });
   }
 
   @override
@@ -40,34 +44,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     super.dispose();
   }
 
-  Future<void> _loadPost() async {
-    try {
-      final apiService = context.read<ApiService>();
-      final response = await apiService.getPost(widget.postId);
-      if (response['success'] == true) {
-        setState(() {
-          _post = PostModel.fromJson(response['post']);
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading post: $e')),
-      );
-    }
-  }
-
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent * 0.9) {
       final state = context.read<CommentBloc>().state;
       if (state is CommentPostCommentsLoaded && state.hasMore) {
         context.read<CommentBloc>().add(
-              CommentLoadPostComments(postId: widget.postId),
-            );
+          CommentLoadPostComments(postId: widget.postId),
+        );
       }
     }
   }
@@ -76,11 +60,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (_commentController.text.trim().isEmpty) return;
 
     context.read<CommentBloc>().add(
-          CommentCreate(
-            postId: widget.postId,
-            text: _commentController.text.trim(),
-          ),
-        );
+      CommentCreate(
+        postId: widget.postId,
+        text: _commentController.text.trim(),
+      ),
+    );
     _commentController.clear();
     FocusScope.of(context).unfocus();
   }
@@ -93,13 +77,40 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       ),
       body: Column(
         children: [
-          // Post
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator())
-          else if (_post != null)
-            PostCard(post: _post!, showComments: false)
-          else
-            const Center(child: Text('Post not found')),
+          // Post - Using BLoC now
+          BlocBuilder<PostBloc, PostState>(
+            builder: (context, state) {
+              if (state is PostLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (state is PostSingleLoaded) {
+                return PostCard(post: state.post, showComments: false);
+              }
+
+              if (state is PostError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      Text(state.message),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          context.read<PostBloc>().add(PostLoadSingle(widget.postId));
+                        },
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return const Center(child: Text('Post not found'));
+            },
+          ),
 
           const Divider(height: 1),
 
@@ -109,11 +120,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               listener: (context, state) {
                 if (state is CommentCreated) {
                   context.read<CommentBloc>().add(
-                        CommentLoadPostComments(
-                          postId: widget.postId,
-                          refresh: true,
-                        ),
-                      );
+                    CommentLoadPostComments(
+                      postId: widget.postId,
+                      refresh: true,
+                    ),
+                  );
                 } else if (state is CommentError) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(state.message)),

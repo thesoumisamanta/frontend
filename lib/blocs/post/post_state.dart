@@ -97,3 +97,12 @@ class PostError extends PostState {
   @override
   List<Object?> get props => [message];
 }
+
+class PostSingleLoaded extends PostState {
+  final PostModel post;
+
+  const PostSingleLoaded(this.post);
+
+  @override
+  List<Object?> get props => [post];
+}

@@ -86,3 +86,12 @@ class PostShare extends PostEvent {
   @override
   List<Object?> get props => [postId];
 }
+
+class PostLoadSingle extends PostEvent {
+  final String postId;
+
+  const PostLoadSingle(this.postId);
+
+  @override
+  List<Object?> get props => [postId];
+}

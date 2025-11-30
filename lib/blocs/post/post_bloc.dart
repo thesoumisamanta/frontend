@@ -16,6 +16,7 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     on<PostDislike>(_onPostDislike);
     on<PostDelete>(_onPostDelete);
     on<PostShare>(_onPostShare);
+    on<PostLoadSingle>(_onPostLoadSingle);
   }
 
   Future<void> _onPostLoadFeed(
@@ -43,16 +44,18 @@ class PostBloc extends Bloc<PostEvent, PostState> {
 
       if (response['success'] == true) {
         final List<dynamic> postsJson = response['posts'];
-        final newPosts = postsJson.map((json) => PostModel.fromJson(json)).toList();
-        
-        final allPosts = event.refresh ? newPosts : [...currentPosts, ...newPosts];
+        final newPosts = postsJson
+            .map((json) => PostModel.fromJson(json))
+            .toList();
+
+        final allPosts = event.refresh
+            ? newPosts
+            : [...currentPosts, ...newPosts];
         final hasMore = page < response['totalPages'];
 
-        emit(PostFeedLoaded(
-          posts: allPosts,
-          hasMore: hasMore,
-          currentPage: page,
-        ));
+        emit(
+          PostFeedLoaded(posts: allPosts, hasMore: hasMore, currentPage: page),
+        );
       } else {
         emit(PostError(response['message'] ?? 'Failed to load posts'));
       }
@@ -88,17 +91,23 @@ class PostBloc extends Bloc<PostEvent, PostState> {
 
       if (response['success'] == true) {
         final List<dynamic> postsJson = response['posts'];
-        final newPosts = postsJson.map((json) => PostModel.fromJson(json)).toList();
-        
-        final allPosts = event.refresh ? newPosts : [...currentPosts, ...newPosts];
+        final newPosts = postsJson
+            .map((json) => PostModel.fromJson(json))
+            .toList();
+
+        final allPosts = event.refresh
+            ? newPosts
+            : [...currentPosts, ...newPosts];
         final hasMore = page < response['totalPages'];
 
-        emit(PostUserPostsLoaded(
-          posts: allPosts,
-          hasMore: hasMore,
-          currentPage: page,
-          userId: event.userId,
-        ));
+        emit(
+          PostUserPostsLoaded(
+            posts: allPosts,
+            hasMore: hasMore,
+            currentPage: page,
+            userId: event.userId,
+          ),
+        );
       } else {
         emit(PostError(response['message'] ?? 'Failed to load user posts'));
       }
@@ -107,10 +116,7 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     }
   }
 
-  Future<void> _onPostCreate(
-    PostCreate event,
-    Emitter<PostState> emit,
-  ) async {
+  Future<void> _onPostCreate(PostCreate event, Emitter<PostState> emit) async {
     try {
       emit(PostCreating());
 
@@ -133,10 +139,7 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     }
   }
 
-  Future<void> _onPostLike(
-    PostLike event,
-    Emitter<PostState> emit,
-  ) async {
+  Future<void> _onPostLike(PostLike event, Emitter<PostState> emit) async {
     try {
       final response = await apiService.likePost(event.postId);
 
@@ -218,10 +221,7 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     }
   }
 
-  Future<void> _onPostDelete(
-    PostDelete event,
-    Emitter<PostState> emit,
-  ) async {
+  Future<void> _onPostDelete(PostDelete event, Emitter<PostState> emit) async {
     try {
       final response = await apiService.deletePost(event.postId);
 
@@ -250,10 +250,7 @@ class PostBloc extends Bloc<PostEvent, PostState> {
     }
   }
 
-  Future<void> _onPostShare(
-    PostShare event,
-    Emitter<PostState> emit,
-  ) async {
+  Future<void> _onPostShare(PostShare event, Emitter<PostState> emit) async {
     try {
       final response = await apiService.sharePost(event.postId);
 
@@ -261,6 +258,26 @@ class PostBloc extends Bloc<PostEvent, PostState> {
         emit(PostActionSuccess('Post shared successfully'));
       } else {
         emit(PostError(response['message'] ?? 'Failed to share post'));
+      }
+    } catch (e) {
+      emit(PostError(e.toString()));
+    }
+  }
+
+  Future<void> _onPostLoadSingle(
+    PostLoadSingle event,
+    Emitter<PostState> emit,
+  ) async {
+    try {
+      emit(PostLoading());
+
+      final response = await apiService.getPost(event.postId);
+
+      if (response['success'] == true) {
+        final post = PostModel.fromJson(response['post']);
+        emit(PostSingleLoaded(post));
+      } else {
+        emit(PostError(response['message'] ?? 'Failed to load post'));
       }
     } catch (e) {
       emit(PostError(e.toString()));

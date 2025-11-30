@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:frontend/blocs/auth/auth_event.dart';
+import 'package:frontend/blocs/comment/comment_bloc.dart';
+import 'package:frontend/utils/constants.dart';
 import 'services/secure_storage_service.dart';
 import 'services/api_service.dart';
 import 'services/notification_service.dart';
@@ -23,21 +25,23 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 
 void main() async {
-  // WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
   
+  // Initialize API URL (detects emulator vs real device)
+  await AppConstants.getBaseUrl();
+  
+  // Uncomment when you're ready for Firebase
   // await Firebase.initializeApp();
-  
   // FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  
   // await NotificationService.initialize();
-  
+
   // Initialize BLoC Observer for debugging
   Bloc.observer = AppBlocObserver();
-  
+
   // Initialize services
   final secureStorage = SecureStorageService();
   final apiService = ApiService(secureStorage);
-  
+
   runApp(
     TravelDiaryApp(
       secureStorage: secureStorage,
@@ -80,6 +84,9 @@ class TravelDiaryApp extends StatelessWidget {
         ),
         BlocProvider<NotificationBloc>(
           create: (context) => NotificationBloc(apiService: apiService),
+        ),
+        BlocProvider<CommentBloc>(
+          create: (context) => CommentBloc(apiService: apiService),
         ),
       ],
       child: MaterialApp(

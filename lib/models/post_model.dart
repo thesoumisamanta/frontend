@@ -86,7 +86,7 @@ class MediaItem {
   final String url;
   final String type;
   final String? thumbnail;
-  final int? duration;
+  final double? duration;
 
   MediaItem({
     required this.publicId,
