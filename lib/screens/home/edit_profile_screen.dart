@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:frontend/helpers/global_methods.dart';
 import '../../models/user_model.dart';
 import '../../blocs/user/user_bloc.dart';
 import '../../blocs/user/user_event.dart';
@@ -23,10 +23,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _websiteController;
   late TextEditingController _businessEmailController;
   late bool _isPrivate;
-  
+
   File? _profileImage;
   File? _coverImage;
-  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -49,101 +48,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _websiteController.dispose();
     _businessEmailController.dispose();
     super.dispose();
-  }
-
-  // Show image source picker (Camera or Gallery)
-  Future<void> _showImageSourcePicker(bool isProfile) async {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Choose ${isProfile ? 'Profile' : 'Cover'} Photo',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: const Icon(Icons.camera_alt, color: Colors.blue),
-                title: const Text('Camera'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.camera, isProfile);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library, color: Colors.green),
-                title: const Text('Gallery'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.gallery, isProfile);
-                },
-              ),
-              if ((isProfile && _profileImage != null) || 
-                  (!isProfile && _coverImage != null)) ...[
-                const Divider(),
-                ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.red),
-                  title: const Text('Remove Photo'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    setState(() {
-                      if (isProfile) {
-                        _profileImage = null;
-                      } else {
-                        _coverImage = null;
-                      }
-                    });
-                  },
-                ),
-              ],
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Pick image from camera or gallery
-  Future<void> _pickImage(ImageSource source, bool isProfile) async {
-    try {
-      final XFile? image = await _picker.pickImage(
-        source: source,
-        maxWidth: isProfile ? 1000 : 1920,
-        maxHeight: isProfile ? 1000 : 1080,
-        imageQuality: 85,
-      );
-
-      if (image != null) {
-        setState(() {
-          if (isProfile) {
-            _profileImage = File(image.path);
-          } else {
-            _coverImage = File(image.path);
-          }
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking image: $e')),
-        );
-      }
-    }
   }
 
   void _saveProfile() {
@@ -174,14 +78,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           BlocConsumer<UserBloc, UserState>(
             listener: (context, state) {
               if (state is UserProfileUpdated) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Profile updated successfully')),
+                GlobalMethods.showSuccessSnackBar(
+                  context,
+                  'Profile updated successfully',
                 );
-                Navigator.of(context).pop(true); // Return true to indicate update
+                Navigator.of(context).pop(true);
               } else if (state is UserError) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(state.message)),
-                );
+                GlobalMethods.showErrorSnackBar(context, state.message);
               }
             },
             builder: (context, state) {
@@ -209,7 +112,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               children: [
                 // Cover Photo
                 GestureDetector(
-                  onTap: () => _showImageSourcePicker(false),
+                  onTap: () => GlobalMethods.showImageSourcePicker(
+                    context: context,
+                    isProfile: false, // FALSE for cover photo
+                    currentImage: _coverImage,
+                    networkImageUrl: widget.user.coverPhoto?.url,
+                    onImagePicked: (image) {
+                      setState(() => _coverImage = image);
+                    },
+                  ),
                   child: Container(
                     height: 200,
                     width: double.infinity,
@@ -234,8 +145,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         ? Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.add_photo_alternate,
-                                  size: 48, color: Colors.grey[600]),
+                              Icon(
+                                Icons.add_photo_alternate,
+                                size: 48,
+                                color: Colors.grey[600],
+                              ),
                               const SizedBox(height: 8),
                               Text(
                                 'Add Cover Photo',
@@ -246,8 +160,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         : null,
                   ),
                 ),
-                
-                // Edit Cover Photo Button
+
+                // Edit Cover Photo Button (overlay)
                 if (_coverImage != null ||
                     (widget.user.coverPhoto != null &&
                         widget.user.coverPhoto!.url.isNotEmpty))
@@ -256,22 +170,38 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     right: 16,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
+                        color: Colors.black.withValues(alpha: 0.6),
                         shape: BoxShape.circle,
                       ),
                       child: IconButton(
                         icon: const Icon(Icons.camera_alt, color: Colors.white),
-                        onPressed: () => _showImageSourcePicker(false),
+                        onPressed: () => GlobalMethods.showImageSourcePicker(
+                          context: context,
+                          isProfile: false, // FALSE for cover photo
+                          currentImage: _coverImage,
+                          networkImageUrl: widget.user.coverPhoto?.url,
+                          onImagePicked: (image) {
+                            setState(() => _coverImage = image);
+                          },
+                        ),
                       ),
                     ),
                   ),
 
-                // Profile Picture (overlapping cover photo)
+                // Profile Picture (positioned over cover photo)
                 Positioned(
                   bottom: -50,
                   left: 16,
                   child: GestureDetector(
-                    onTap: () => _showImageSourcePicker(true),
+                    onTap: () => GlobalMethods.showImageSourcePicker(
+                      context: context,
+                      isProfile: true, // TRUE for profile photo
+                      currentImage: _profileImage,
+                      networkImageUrl: widget.user.profilePicture.url,
+                      onImagePicked: (image) {
+                        setState(() => _profileImage = image);
+                      },
+                    ),
                     child: Stack(
                       children: [
                         Container(

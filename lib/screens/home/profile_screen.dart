@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:frontend/helpers/global_methods.dart';
 import 'package:frontend/utils/app_colors.dart';
 import '../../blocs/auth/auth_bloc.dart';
 import '../../blocs/auth/auth_event.dart';
@@ -29,6 +31,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  File? _profileImage;
 
   @override
   void initState() {
@@ -77,38 +80,16 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // Generate initials from full name
-  String _getInitials(String fullName) {
-    List<String> names = fullName.trim().split(' ');
-    if (names.isEmpty) return '?';
-    
-    if (names.length == 1) {
-      return names[0].substring(0, 1).toUpperCase();
-    }
-    
-    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1))
-        .toUpperCase();
-  }
+  void _handleProfileImagePick(File? image) {
+    if (image != null) {
+      setState(() => _profileImage = image);
 
-  // Generate random color based on name (consistent for same name)
-  Color _getRandomColor(String name) {
-    final colors = [
-      Colors.blue,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.teal,
-      Colors.pink,
-      Colors.indigo,
-      Colors.cyan,
-    ];
-    
-    int hash = 0;
-    for (int i = 0; i < name.length; i++) {
-      hash = name.codeUnitAt(i) + ((hash << 5) - hash);
+      // Immediately update profile picture on backend
+      final data = <String, dynamic>{};
+      context.read<UserBloc>().add(
+        UserUpdateProfile(data, profileImage: image),
+      );
     }
-    
-    return colors[hash.abs() % colors.length];
   }
 
   @override
@@ -201,130 +182,238 @@ class _ProfileScreenState extends State<ProfileScreen>
                         child: Column(
                           children: [
                             const SizedBox(height: 16),
-                            // Cover Photo and Profile Section
-                            SizedBox(
-                              width: double.infinity,
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  // Cover Photo or Placeholder
-                                  user.coverPhoto != null
-                                      ? Container(
-                                          height: 120,
-                                          width: double.infinity,
-                                          decoration: BoxDecoration(
-                                            image: DecorationImage(
-                                              image: CachedImageProvider(
-                                                user.coverPhoto!.url,
-                                              ),
-                                              fit: BoxFit.cover,
-                                            ),
-                                          ),
-                                        )
-                                      : Container(
-                                          height: 120,
-                                          width: double.infinity,
-                                          color: Colors.grey[200],
-                                        ),
 
-                                  Positioned(
-                                    left: 16,
-                                    bottom: -80,
+                            // FIXED: Restructured to ensure proper touch detection
+                            Column(
+                              children: [
+                                // Cover Photo Section
+                                user.coverPhoto != null
+                                    ? Container(
+                                        height: 120,
+                                        width: double.infinity,
+                                        decoration: BoxDecoration(
+                                          image: DecorationImage(
+                                            image: CachedImageProvider(
+                                              user.coverPhoto!.url,
+                                            ),
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      )
+                                    : Container(
+                                        height: 120,
+                                        width: double.infinity,
+                                        color: Colors.grey[200],
+                                      ),
+
+                                // Profile Picture Section (outside of Stack for proper touch)
+                                Transform.translate(
+                                  offset: const Offset(0, -50),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
                                     child: Row(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: Colors.white,
-                                              width: 4,
-                                            ),
-                                          ),
-                                          child: CircleAvatar(
+                                        // Profile Picture with Camera Icon
+                                        GestureDetector(
+                                          onTap: isOwnProfile
+                                              ? () {
+                                                  GlobalMethods.showImageSourcePicker(
+                                                    context: context,
+                                                    isProfile: true,
+                                                    currentImage: _profileImage,
+                                                    networkImageUrl:
+                                                        user.profilePicture.url,
+                                                    onImagePicked:
+                                                        _handleProfileImagePick,
+                                                  );
+                                                }
+                                              : null,
+                                          child: Stack(
+                                            clipBehavior: Clip.none,
+                                            children: [
+                                              Container(
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(
+                                                    width: 4,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                                child: CircleAvatar(
                                                   radius: 50,
                                                   backgroundImage:
-                                                      CachedImageProvider(
-                                                    user.profilePicture!.url,
-                                                  ),
+                                                      _profileImage != null
+                                                      ? FileImage(
+                                                          _profileImage!,
+                                                        )
+                                                      : CachedImageProvider(
+                                                              user
+                                                                  .profilePicture
+                                                                  .url,
+                                                            )
+                                                            as ImageProvider,
                                                 ),
-                                        ),
-                                        const SizedBox(width: 20),
-                                        Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            const SizedBox(height: 30),
-                                            Row(
-                                              children: [
-                                                Text(
-                                                  user.fullName,
-                                                  style: const TextStyle(
-                                                    fontSize: 20,
-                                                    fontWeight:
-                                                        FontWeight.bold,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                if (isOwnProfile)
-                                                  InkWell(
-                                                    onTap: () {
-                                                      Navigator.push(
-                                                        context,
-                                                        MaterialPageRoute(
-                                                          builder: (_) =>
-                                                              EditProfileScreen(
-                                                            user: user,
-                                                          ),
+                                              ),
+
+                                              // Camera Icon - Now properly clickable
+                                              if (isOwnProfile)
+                                                Positioned(
+                                                  bottom: 0,
+                                                  right: 0,
+                                                  child: Material(
+                                                    color: Colors.transparent,
+                                                    child: InkWell(
+                                                      onTap: () {
+                                                        GlobalMethods.showImageSourcePicker(
+                                                          context: context,
+                                                          isProfile: true,
+                                                          currentImage:
+                                                              _profileImage,
+                                                          networkImageUrl: user
+                                                              .profilePicture
+                                                              .url,
+                                                          onImagePicked:
+                                                              _handleProfileImagePick,
+                                                        );
+                                                      },
+                                                      customBorder:
+                                                          const CircleBorder(),
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets.all(
+                                                              8,
+                                                            ),
+                                                        decoration:
+                                                            const BoxDecoration(
+                                                              color: AppColors
+                                                                  .primary,
+                                                              shape: BoxShape
+                                                                  .circle,
+                                                            ),
+                                                        child: const Icon(
+                                                          Icons.camera_alt,
+                                                          color: Colors.white,
+                                                          size: 18,
                                                         ),
-                                                      );
-                                                    },
-                                                    child: const Padding(
-                                                      padding:
-                                                          EdgeInsets.all(4.0),
-                                                      child: Icon(
-                                                        Icons.edit_outlined,
-                                                        size: 16,
                                                       ),
                                                     ),
                                                   ),
-                                              ],
-                                            ),
-                                            Text(
-                                              '@${user.username}',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600],
-                                              ),
-                                            ),
-
-                                            if (user.bio.isNotEmpty) ...[
-                                              const SizedBox(height: 8),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.only(
-                                                  right: 14,
                                                 ),
-                                                child: Text(
-                                                  user.bio,
-                                                  textAlign: TextAlign.left,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                  ),
-                                                ),
-                                              ),
                                             ],
-                                          ],
+                                          ),
+                                        ),
+
+                                        const SizedBox(width: 16),
+
+                                        // User Info Section
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              const SizedBox(height: 50),
+
+                                              // Name and Edit Icon
+                                              Row(
+                                                children: [
+                                                  Flexible(
+                                                    child: Text(
+                                                      user.fullName,
+                                                      style: const TextStyle(
+                                                        fontSize: 20,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  if (isOwnProfile) ...[
+                                                    const SizedBox(width: 8),
+                                                    Material(
+                                                      color: Colors.transparent,
+                                                      child: InkWell(
+                                                        onTap: () {
+                                                          Navigator.push(
+                                                            context,
+                                                            MaterialPageRoute(
+                                                              builder: (_) =>
+                                                                  EditProfileScreen(
+                                                                    user: user,
+                                                                  ),
+                                                            ),
+                                                          ).then((updated) {
+                                                            // Refresh profile if updated
+                                                            if (updated ==
+                                                                true) {
+                                                              context
+                                                                  .read<
+                                                                    UserBloc
+                                                                  >()
+                                                                  .add(
+                                                                    UserLoadProfile(
+                                                                      widget
+                                                                          .userId,
+                                                                    ),
+                                                                  );
+                                                            }
+                                                          });
+                                                        },
+                                                        customBorder:
+                                                            const CircleBorder(),
+                                                        child: const Padding(
+                                                          padding:
+                                                              EdgeInsets.all(
+                                                                4.0,
+                                                              ),
+                                                          child: Icon(
+                                                            Icons.edit_outlined,
+                                                            size: 18,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+
+                                              // Username
+                                              Text(
+                                                '@${user.username}',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.grey[600],
+                                                ),
+                                              ),
+
+                                              // Bio
+                                              if (user.bio.isNotEmpty) ...[
+                                                const SizedBox(height: 8),
+                                                Text(
+                                                  user.bio,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                  ),
+                                                  maxLines: 3,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ],
+                                          ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 100),
-                            // Stats
+
+                            const SizedBox(height: 16),
+
+                            // Stats Row
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
@@ -368,15 +457,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 14),
+
+                            const SizedBox(height: 16),
+
                             // Action Buttons
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: Row(
-                                children: [
-                                  if (!isOwnProfile)
+                            if (!isOwnProfile)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Row(
+                                  children: [
                                     Expanded(
                                       child: ElevatedButton(
                                         onPressed: _handleFollowToggle,
@@ -397,28 +488,29 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         ),
                                       ),
                                     ),
-                                  if (state.isFollowing &&
-                                      user.accountType != 'business') ...[
-                                    const SizedBox(width: 8),
-                                    ElevatedButton(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => ChatScreen(
-                                              userId: widget.userId,
+                                    if (state.isFollowing &&
+                                        user.accountType != 'business') ...[
+                                      const SizedBox(width: 8),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => ChatScreen(
+                                                userId: widget.userId,
+                                              ),
                                             ),
-                                          ),
-                                        );
-                                      },
-                                      child: const Icon(
-                                        Icons.chat_bubble_outline,
+                                          );
+                                        },
+                                        child: const Icon(
+                                          Icons.chat_bubble_outline,
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                   ],
-                                ],
+                                ),
                               ),
-                            ),
+
                             const SizedBox(height: 16),
                           ],
                         ),

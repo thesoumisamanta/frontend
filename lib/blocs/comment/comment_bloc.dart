@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../models/comment_model.dart';
+import '../../models/user_model.dart';
 import '../../services/api_service.dart';
 import 'comment_event.dart';
 import 'comment_state.dart';
@@ -11,6 +12,7 @@ class CommentBloc extends Bloc<CommentEvent, CommentState> {
     on<CommentLoadPostComments>(_onCommentLoadPostComments);
     on<CommentLoadReplies>(_onCommentLoadReplies);
     on<CommentCreate>(_onCommentCreate);
+    on<CommentUpdate>(_onCommentUpdate);
     on<CommentLike>(_onCommentLike);
     on<CommentDislike>(_onCommentDislike);
     on<CommentDelete>(_onCommentDelete);
@@ -72,8 +74,6 @@ class CommentBloc extends Bloc<CommentEvent, CommentState> {
     Emitter<CommentState> emit,
   ) async {
     try {
-      emit(CommentLoading());
-
       final response = await apiService.getCommentReplies(event.commentId);
 
       if (response['success'] == true) {
@@ -118,6 +118,39 @@ class CommentBloc extends Bloc<CommentEvent, CommentState> {
     }
   }
 
+  Future<void> _onCommentUpdate(
+    CommentUpdate event,
+    Emitter<CommentState> emit,
+  ) async {
+    try {
+      final response = await apiService.updateComment(
+        event.commentId,
+        event.text,
+      );
+
+      if (response['success'] == true) {
+        final currentState = state;
+        
+        if (currentState is CommentPostCommentsLoaded) {
+          final updatedComments = _updateCommentInListById(
+            currentState.comments,
+            event.commentId,
+            text: event.text,
+            isEdited: true,
+          );
+
+          emit(currentState.copyWith(comments: updatedComments));
+        }
+        
+        emit(const CommentActionSuccess('Comment updated successfully'));
+      } else {
+        emit(CommentError(response['message'] ?? 'Failed to update comment'));
+      }
+    } catch (e) {
+      emit(CommentError(e.toString()));
+    }
+  }
+
   Future<void> _onCommentLike(
     CommentLike event,
     Emitter<CommentState> emit,
@@ -129,46 +162,18 @@ class CommentBloc extends Bloc<CommentEvent, CommentState> {
         final currentState = state;
         
         if (currentState is CommentPostCommentsLoaded) {
-          final updatedComments = currentState.comments.map((comment) {
-            if (comment.id == event.commentId) {
-              return CommentModel(
-                id: comment.id,
-                post: comment.post,
-                user: comment.user,
-                text: comment.text,
-                parentComment: comment.parentComment,
-                likesCount: response['likesCount'],
-                dislikesCount: response['dislikesCount'],
-                repliesCount: comment.repliesCount,
-                createdAt: comment.createdAt,
-                hasLiked: response['hasLiked'],
-                hasDisliked: response['hasDisliked'],
-              );
-            }
-            return comment;
-          }).toList();
-
+          final updatedComments = _updateCommentCounts(
+            currentState.comments,
+            event.commentId,
+            response,
+          );
           emit(currentState.copyWith(comments: updatedComments));
         } else if (currentState is CommentRepliesLoaded) {
-          final updatedReplies = currentState.replies.map((comment) {
-            if (comment.id == event.commentId) {
-              return CommentModel(
-                id: comment.id,
-                post: comment.post,
-                user: comment.user,
-                text: comment.text,
-                parentComment: comment.parentComment,
-                likesCount: response['likesCount'],
-                dislikesCount: response['dislikesCount'],
-                repliesCount: comment.repliesCount,
-                createdAt: comment.createdAt,
-                hasLiked: response['hasLiked'],
-                hasDisliked: response['hasDisliked'],
-              );
-            }
-            return comment;
-          }).toList();
-
+          final updatedReplies = _updateCommentCounts(
+            currentState.replies,
+            event.commentId,
+            response,
+          );
           emit(CommentRepliesLoaded(
             commentId: currentState.commentId,
             replies: updatedReplies,
@@ -191,26 +196,22 @@ class CommentBloc extends Bloc<CommentEvent, CommentState> {
         final currentState = state;
         
         if (currentState is CommentPostCommentsLoaded) {
-          final updatedComments = currentState.comments.map((comment) {
-            if (comment.id == event.commentId) {
-              return CommentModel(
-                id: comment.id,
-                post: comment.post,
-                user: comment.user,
-                text: comment.text,
-                parentComment: comment.parentComment,
-                likesCount: response['likesCount'],
-                dislikesCount: response['dislikesCount'],
-                repliesCount: comment.repliesCount,
-                createdAt: comment.createdAt,
-                hasLiked: response['hasLiked'],
-                hasDisliked: response['hasDisliked'],
-              );
-            }
-            return comment;
-          }).toList();
-
+          final updatedComments = _updateCommentCounts(
+            currentState.comments,
+            event.commentId,
+            response,
+          );
           emit(currentState.copyWith(comments: updatedComments));
+        } else if (currentState is CommentRepliesLoaded) {
+          final updatedReplies = _updateCommentCounts(
+            currentState.replies,
+            event.commentId,
+            response,
+          );
+          emit(CommentRepliesLoaded(
+            commentId: currentState.commentId,
+            replies: updatedReplies,
+          ));
         }
       }
     } catch (e) {
@@ -229,9 +230,12 @@ class CommentBloc extends Bloc<CommentEvent, CommentState> {
         final currentState = state;
         
         if (currentState is CommentPostCommentsLoaded) {
-          final updatedComments = currentState.comments
-              .where((comment) => comment.id != event.commentId)
-              .toList();
+          final updatedComments = _updateCommentInListById(
+            currentState.comments,
+            event.commentId,
+            text: '[Deleted]',
+            isDeleted: true,
+          );
 
           emit(currentState.copyWith(comments: updatedComments));
         }
@@ -242,6 +246,73 @@ class CommentBloc extends Bloc<CommentEvent, CommentState> {
       }
     } catch (e) {
       emit(CommentError(e.toString()));
+    }
+  }
+
+  // Helper method to update comment counts (likes/dislikes)
+  List<CommentModel> _updateCommentCounts(
+    List<CommentModel> comments,
+    String commentId,
+    Map<String, dynamic> response,
+  ) {
+    return comments.map((comment) {
+      if (comment.id == commentId) {
+        return comment.copyWith(
+          likesCount: response['likesCount'],
+          dislikesCount: response['dislikesCount'],
+          hasLiked: response['hasLiked'],
+          hasDisliked: response['hasDisliked'],
+        );
+      }
+      return comment;
+    }).toList();
+  }
+
+  // Helper method to update comment text/status
+  List<CommentModel> _updateCommentInListById(
+    List<CommentModel> comments,
+    String commentId, {
+    String? text,
+    bool? isEdited,
+    bool? isDeleted,
+  }) {
+    return comments.map((comment) {
+      if (comment.id == commentId) {
+        return comment.copyWith(
+          text: text,
+          isEdited: isEdited,
+          isDeleted: isDeleted,
+        );
+      }
+      return comment;
+    }).toList();
+  }
+
+  // Method to get comment likes (for showing users list)
+  Future<List<UserModel>> getCommentLikes(String commentId) async {
+    try {
+      final response = await apiService.getCommentLikes(commentId);
+      if (response['success'] == true) {
+        final List<dynamic> usersJson = response['users'];
+        return usersJson.map((json) => UserModel.fromJson(json)).toList();
+      }
+      return [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Method to get comment dislikes (for showing users list)
+  Future<List<UserModel>> getCommentDislikes(String commentId) async {
+    try {
+      final response = await apiService.getCommentDislikes(commentId);
+      if (response['success'] == true) {
+        final List<dynamic> usersJson = response['users'];
+        return usersJson.map((json) => UserModel.fromJson(json)).toList();
+      }
+      return [];
+    } catch (e) {
+      return [];
     }
   }
 }

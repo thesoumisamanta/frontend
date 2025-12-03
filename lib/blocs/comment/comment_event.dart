@@ -22,11 +22,15 @@ class CommentLoadPostComments extends CommentEvent {
 
 class CommentLoadReplies extends CommentEvent {
   final String commentId;
+  final bool refresh;
 
-  const CommentLoadReplies(this.commentId);
+  const CommentLoadReplies(
+    this.commentId, {
+    this.refresh = false,
+  });
 
   @override
-  List<Object?> get props => [commentId];
+  List<Object?> get props => [commentId, refresh];
 }
 
 class CommentCreate extends CommentEvent {
@@ -42,6 +46,16 @@ class CommentCreate extends CommentEvent {
 
   @override
   List<Object?> get props => [postId, text, parentCommentId];
+}
+
+class CommentUpdate extends CommentEvent {
+  final String commentId;
+  final String text;
+
+  const CommentUpdate(this.commentId, this.text);
+
+  @override
+  List<Object?> get props => [commentId, text];
 }
 
 class CommentLike extends CommentEvent {
@@ -66,6 +80,24 @@ class CommentDelete extends CommentEvent {
   final String commentId;
 
   const CommentDelete(this.commentId);
+
+  @override
+  List<Object?> get props => [commentId];
+}
+
+class CommentLoadLikes extends CommentEvent {
+  final String commentId;
+
+  const CommentLoadLikes(this.commentId);
+
+  @override
+  List<Object?> get props => [commentId];
+}
+
+class CommentLoadDislikes extends CommentEvent {
+  final String commentId;
+
+  const CommentLoadDislikes(this.commentId);
 
   @override
   List<Object?> get props => [commentId];

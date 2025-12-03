@@ -21,6 +21,10 @@ class PostDetailScreen extends StatefulWidget {
 class _PostDetailScreenState extends State<PostDetailScreen> {
   final TextEditingController _commentController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _commentFocusNode = FocusNode();
+  
+  String? _replyingToCommentId;
+  String? _replyingToUsername;
 
   @override
   void initState() {
@@ -29,7 +33,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     
     // Load data using BLoCs
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // ✅ Use PostBloc to load the single post
       context.read<PostBloc>().add(PostLoadSingle(widget.postId));
       context.read<CommentBloc>().add(
         CommentLoadPostComments(postId: widget.postId, refresh: true),
@@ -41,6 +44,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   void dispose() {
     _commentController.dispose();
     _scrollController.dispose();
+    _commentFocusNode.dispose();
     super.dispose();
   }
 
@@ -56,6 +60,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
+  void _handleReply(String commentId, String username) {
+    setState(() {
+      _replyingToCommentId = commentId;
+      _replyingToUsername = username;
+    });
+    _commentFocusNode.requestFocus();
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyingToCommentId = null;
+      _replyingToUsername = null;
+    });
+  }
+
   void _addComment() {
     if (_commentController.text.trim().isEmpty) return;
 
@@ -63,9 +82,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       CommentCreate(
         postId: widget.postId,
         text: _commentController.text.trim(),
+        parentCommentId: _replyingToCommentId,
       ),
     );
+    
     _commentController.clear();
+    _cancelReply();
     FocusScope.of(context).unfocus();
   }
 
@@ -81,7 +103,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           BlocBuilder<PostBloc, PostState>(
             builder: (context, state) {
               if (state is PostLoading) {
-                return const Center(child: CircularProgressIndicator());
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
               }
 
               if (state is PostSingleLoaded) {
@@ -90,20 +117,29 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
               if (state is PostError) {
                 return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline, size: 64, color: Colors.grey),
-                      const SizedBox(height: 16),
-                      Text(state.message),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          context.read<PostBloc>().add(PostLoadSingle(widget.postId));
-                        },
-                        child: const Text('Retry'),
-                      ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(state.message),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            context.read<PostBloc>().add(
+                              PostLoadSingle(widget.postId),
+                            );
+                          },
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               }
@@ -129,6 +165,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(state.message)),
                   );
+                } else if (state is CommentActionSuccess) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(state.message)),
+                  );
+                  // Refresh comments after action
+                  context.read<CommentBloc>().add(
+                    CommentLoadPostComments(
+                      postId: widget.postId,
+                      refresh: true,
+                    ),
+                  );
                 }
               },
               builder: (context, state) {
@@ -142,7 +189,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.comment_outlined, size: 64, color: Colors.grey),
+                          Icon(
+                            Icons.comment_outlined,
+                            size: 64,
+                            color: Colors.grey,
+                          ),
                           SizedBox(height: 16),
                           Text(
                             'No comments yet',
@@ -166,11 +217,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         return state.hasMore
                             ? const Padding(
                                 padding: EdgeInsets.all(16.0),
-                                child: Center(child: CircularProgressIndicator()),
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
                               )
                             : const SizedBox(height: 80);
                       }
-                      return CommentItem(comment: state.comments[index]);
+                      return CommentItem(
+                        comment: state.comments[index],
+                        postId: widget.postId,
+                        onReply: _handleReply,
+                      );
                     },
                   );
                 }
@@ -194,45 +251,96 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               ],
             ),
             child: SafeArea(
-              child: Row(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _commentController,
-                      decoration: InputDecoration(
-                        hintText: 'Add a comment...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
+                  // Replying indicator
+                  if (_replyingToUsername != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.reply,
+                            size: 16,
+                            color: Colors.blue[700],
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Replying to @$_replyingToUsername',
+                            style: TextStyle(
+                              color: Colors.blue[700],
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: _cancelReply,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  
+                  if (_replyingToUsername != null) const SizedBox(height: 8),
+                  
+                  // Comment input row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _commentController,
+                          focusNode: _commentFocusNode,
+                          decoration: InputDecoration(
+                            hintText: _replyingToUsername != null
+                                ? 'Reply to @$_replyingToUsername...'
+                                : 'Add a comment...',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                          ),
+                          maxLines: 5,
+                          minLines: 1,
                         ),
                       ),
-                      maxLines: 5,
-                      minLines: 1,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  BlocBuilder<CommentBloc, CommentState>(
-                    builder: (context, state) {
-                      final isCreating = state is CommentCreating;
-                      return IconButton(
-                        onPressed: isCreating ? null : _addComment,
-                        icon: isCreating
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Icon(
-                                Icons.send,
-                                color: Theme.of(context).primaryColor,
-                              ),
-                      );
-                    },
+                      const SizedBox(width: 8),
+                      BlocBuilder<CommentBloc, CommentState>(
+                        builder: (context, state) {
+                          final isCreating = state is CommentCreating;
+                          return IconButton(
+                            onPressed: isCreating ? null : _addComment,
+                            icon: isCreating
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.send,
+                                    color: Theme.of(context).primaryColor,
+                                  ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),

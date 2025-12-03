@@ -329,14 +329,6 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> getCommentReplies(String commentId) async {
-    try {
-      final response = await _dio.get('/comments/$commentId/replies');
-      return response.data;
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
 
   Future<Map<String, dynamic>> likeComment(String commentId) async {
     try {
@@ -629,6 +621,61 @@ class ApiService {
       return response.data;
     } catch (e) {
       throw _handleError(e);
+    }
+  }
+
+  // Add these methods to your ApiService class
+
+  // Get comment replies with pagination
+  Future<Map<String, dynamic>> getCommentReplies(
+    String commentId, {
+    int page = 1,
+    int limit = 10,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/comments/$commentId/replies',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      return response.data;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Update comment
+  Future<Map<String, dynamic>> updateComment(
+    String commentId,
+    String text,
+  ) async {
+    try {
+      final response = await _dio.put(
+        '/comments/$commentId',
+        data: {'text': text},
+      );
+      return response.data;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Get users who liked a comment
+  Future<Map<String, dynamic>> getCommentLikes(String commentId) async {
+    try {
+      final response = await _dio.get('/comments/$commentId/likes');
+      return response.data;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Get users who disliked a comment
+  Future<Map<String, dynamic>> getCommentDislikes(String commentId) async {
+    try {
+      final response = await _dio.get('/comments/$commentId/dislikes');
+      return response.data;
+    } catch (e) {
+      rethrow;
     }
   }
 }
