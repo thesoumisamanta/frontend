@@ -1,24 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../blocs/post/post_bloc.dart';
-import '../../blocs/post/post_event.dart';
-import '../../blocs/post/post_state.dart';
 import '../../blocs/comment/comment_bloc.dart';
 import '../../blocs/comment/comment_event.dart';
 import '../../blocs/comment/comment_state.dart';
-import '../../widgets/post_card.dart';
 import '../../widgets/comment_item.dart';
 
-class PostDetailScreen extends StatefulWidget {
+class CommentsScreen extends StatefulWidget {
   final String postId;
 
-  const PostDetailScreen({super.key, required this.postId});
+  const CommentsScreen({super.key, required this.postId});
 
   @override
-  State<PostDetailScreen> createState() => _PostDetailScreenState();
+  State<CommentsScreen> createState() => _CommentsScreenState();
 }
 
-class _PostDetailScreenState extends State<PostDetailScreen> {
+class _CommentsScreenState extends State<CommentsScreen> {
   final TextEditingController _commentController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _commentFocusNode = FocusNode();
@@ -33,7 +29,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
     // Load data using BLoCs
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<PostBloc>().add(PostLoadSingle(widget.postId));
+      // context.read<PostBloc>().add(PostLoadSingle(widget.postId));
       context.read<CommentBloc>().add(
         CommentLoadPostComments(postId: widget.postId, refresh: true),
       );
@@ -104,9 +100,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.arrow_back),
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12.0),
-                child: const Text('Post'),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12.0),
+                child: Text('Post'),
               ),
             ],
           ),
@@ -114,152 +110,94 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         toolbarHeight: 100,
         automaticallyImplyLeading: false,
       ),
-      body: Column(
-        children: [
-          // Post - Using BLoC now
-          BlocBuilder<PostBloc, PostState>(
-            builder: (context, state) {
-              if (state is PostLoading) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(20.0),
-                    child: CircularProgressIndicator(),
-                  ),
+      body: BlocConsumer<CommentBloc, CommentState>(
+        listener: (context, state) {
+          if (state is CommentCreated) {
+            context.read<CommentBloc>().add(
+              CommentLoadPostComments(
+                postId: widget.postId,
+                refresh: true,
+              ),
+            );
+          } else if (state is CommentError) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.message)));
+          } else if (state is CommentActionSuccess) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.message)));
+            // Refresh comments after action
+            context.read<CommentBloc>().add(
+              CommentLoadPostComments(
+                postId: widget.postId,
+                refresh: true,
+              ),
+            );
+          }
+        },
+        buildWhen: (previous, current) {
+          // Only rebuild when CommentPostCommentsLoaded changes
+          // Ignore CommentRepliesLoaded to prevent hiding comments
+          return current is CommentLoading || current is CommentPostCommentsLoaded;
+        },
+        builder: (context, state) {
+          if (state is CommentLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+            
+          if (state is CommentPostCommentsLoaded) {
+            if (state.comments.isEmpty) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.comment_outlined,
+                      size: 64,
+                      color: Colors.grey,
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'No comments yet',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Be the first to comment',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                  ],
+                ),
+              );
+            }
+            
+            return ListView.builder(
+              controller: _scrollController,
+              itemCount: state.comments.length + 1,
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+              itemBuilder: (context, index) {
+                if (index == state.comments.length) {
+                  return state.hasMore
+                      ? const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        )
+                      : const SizedBox(height: 80);
+                }
+                return CommentItem(
+                  comment: state.comments[index],
+                  postId: widget.postId,
+                  onReply: _handleReply,
                 );
-              }
-
-              if (state is PostSingleLoaded) {
-                return PostCard(post: state.post, showComments: false);
-              }
-
-              if (state is PostError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(state.message),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () {
-                            context.read<PostBloc>().add(
-                              PostLoadSingle(widget.postId),
-                            );
-                          },
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
-
-              return const Center(child: Text('Post not found'));
-            },
-          ),
-
-          const Divider(height: 1),
-
-          // Comments
-          Expanded(
-            child: BlocConsumer<CommentBloc, CommentState>(
-              listener: (context, state) {
-                if (state is CommentCreated) {
-                  context.read<CommentBloc>().add(
-                    CommentLoadPostComments(
-                      postId: widget.postId,
-                      refresh: true,
-                    ),
-                  );
-                } else if (state is CommentError) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(state.message)));
-                } else if (state is CommentActionSuccess) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(state.message)));
-                  // Refresh comments after action
-                  context.read<CommentBloc>().add(
-                    CommentLoadPostComments(
-                      postId: widget.postId,
-                      refresh: true,
-                    ),
-                  );
-                }
               },
-              buildWhen: (previous, current) {
-                // Only rebuild when CommentPostCommentsLoaded changes
-                // Ignore CommentRepliesLoaded to prevent hiding comments
-                return current is CommentLoading || current is CommentPostCommentsLoaded;
-              },
-              builder: (context, state) {
-                if (state is CommentLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (state is CommentPostCommentsLoaded) {
-                  if (state.comments.isEmpty) {
-                    return const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.comment_outlined,
-                            size: 64,
-                            color: Colors.grey,
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'No comments yet',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Be the first to comment',
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  return ListView.builder(
-                    controller: _scrollController,
-                    itemCount: state.comments.length + 1,
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                    itemBuilder: (context, index) {
-                      if (index == state.comments.length) {
-                        return state.hasMore
-                            ? const Padding(
-                                padding: EdgeInsets.all(16.0),
-                                child: Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              )
-                            : const SizedBox(height: 80);
-                      }
-                      return CommentItem(
-                        comment: state.comments[index],
-                        postId: widget.postId,
-                        onReply: _handleReply,
-                      );
-                    },
-                  );
-                }
-
-                return const SizedBox.shrink();
-              },
-            ),
-          ),
-        ],
+            );
+          }
+            
+          return const SizedBox.shrink();
+        },
       ),
 
       // Comment Input

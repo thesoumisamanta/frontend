@@ -1,25 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:frontend/blocs/auth/auth_bloc.dart';
+import 'package:frontend/blocs/auth/auth_state.dart';
+import 'package:frontend/screens/home/comments_screen.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../models/post_model.dart';
 import '../blocs/post/post_bloc.dart';
 import '../blocs/post/post_event.dart';
 import '../screens/home/profile_screen.dart';
-import '../screens/home/post_detail_screen.dart';
 import 'cached_image.dart';
 
 class PostCard extends StatelessWidget {
   final PostModel post;
   final bool showComments;
 
-  const PostCard({
-    super.key,
-    required this.post,
-    this.showComments = true,
-  });
+  const PostCard({super.key, required this.post, this.showComments = true});
 
   @override
   Widget build(BuildContext context) {
+    final state = context.read<AuthBloc>().state;
+    final user = state is AuthAuthenticated ? state.user : null;
+    final bool hasLiked = user != null
+        ? (post.likes.contains(user.id) || post.hasLiked)
+        : false;
+    final bool hasDisliked = user != null
+        ? (post.dislikes.contains(user.id) || post.hasDisliked)
+        : false;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
@@ -61,10 +67,7 @@ class PostCard extends StatelessWidget {
                   const Text(' • '),
                   const Icon(Icons.location_on, size: 12),
                   Flexible(
-                    child: Text(
-                      post.location,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: Text(post.location, overflow: TextOverflow.ellipsis),
                   ),
                 ],
               ],
@@ -86,10 +89,7 @@ class PostCard extends StatelessWidget {
                 itemBuilder: (context, index) {
                   final media = post.media[index];
                   if (media.type == 'image') {
-                    return CachedImage(
-                      imageUrl: media.url,
-                      fit: BoxFit.cover,
-                    );
+                    return CachedImage(imageUrl: media.url, fit: BoxFit.cover);
                   } else {
                     return Stack(
                       fit: StackFit.expand,
@@ -120,8 +120,8 @@ class PostCard extends StatelessWidget {
               children: [
                 IconButton(
                   icon: Icon(
-                    post.hasLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
-                    color: post.hasLiked ? Colors.blue : null,
+                    hasLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                    color: hasLiked ? Colors.blue : null,
                   ),
                   onPressed: () {
                     context.read<PostBloc>().add(PostLike(post.id));
@@ -131,10 +131,10 @@ class PostCard extends StatelessWidget {
                 const SizedBox(width: 16),
                 IconButton(
                   icon: Icon(
-                    post.hasDisliked
+                    hasDisliked
                         ? Icons.thumb_down
                         : Icons.thumb_down_outlined,
-                    color: post.hasDisliked ? Colors.red : null,
+                    color: hasDisliked ? Colors.red : null,
                   ),
                   onPressed: () {
                     context.read<PostBloc>().add(PostDislike(post.id));
@@ -145,14 +145,15 @@ class PostCard extends StatelessWidget {
                 if (showComments)
                   IconButton(
                     icon: const Icon(Icons.comment_outlined),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => PostDetailScreen(postId: post.id),
-                        ),
-                      );
-                    },
+                    onPressed: () => _showComments(context),
+                    // onPressed: () {
+                    //   Navigator.push(
+                    //     context,
+                    //     MaterialPageRoute(
+                    //       builder: (_) => PostDetailScreen(postId: post.id),
+                    //     ),
+                    //   );
+                    // },
                   ),
                 if (showComments) Text(post.commentsCount.toString()),
                 const Spacer(),
@@ -189,8 +190,10 @@ class PostCard extends StatelessWidget {
           // Tags
           if (post.tags.isNotEmpty)
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 8.0,
+              ),
               child: Wrap(
                 spacing: 8,
                 children: post.tags
@@ -207,6 +210,17 @@ class PostCard extends StatelessWidget {
           const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+
+  void _showComments(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      constraints: const BoxConstraints.expand(),
+      isScrollControlled: true,
+      builder: (context) {
+        return CommentsScreen(postId: post.id);
+      },
     );
   }
 

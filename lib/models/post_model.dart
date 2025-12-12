@@ -8,6 +8,8 @@ class PostModel {
   final List<MediaItem> media;
   final String location;
   final List<String> tags;
+  final List<String> likes;
+  final List<String> dislikes;
   final int likesCount;
   final int dislikesCount;
   final int commentsCount;
@@ -33,6 +35,8 @@ class PostModel {
     required this.viewsCount,
     required this.isCommentEnabled,
     required this.createdAt,
+    this.likes = const [],
+    this.dislikes = const [],
     this.hasLiked = false,
     this.hasDisliked = false,
   });
@@ -58,6 +62,8 @@ class PostModel {
       createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
       hasLiked: json['hasLiked'] ?? false,
       hasDisliked: json['hasDisliked'] ?? false,
+      likes: List<String>.from(json['likes'] ?? []),
+      dislikes: List<String>.from(json['dislikes'] ?? []),
     );
   }
 
@@ -77,6 +83,8 @@ class PostModel {
       'viewsCount': viewsCount,
       'isCommentEnabled': isCommentEnabled,
       'createdAt': createdAt.toIso8601String(),
+      'likes': likes,
+      'dislikes': dislikes,
     };
   }
 }
