@@ -27,8 +27,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize API URL (detects emulator vs real device)
-  await AppConstants.getBaseUrl();
   
   // Uncomment when you're ready for Firebase
   // await Firebase.initializeApp();
