@@ -3,12 +3,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:frontend/blocs/auth/auth_bloc.dart';
 import 'package:frontend/blocs/auth/auth_state.dart';
 import 'package:frontend/screens/home/comments_screen.dart';
+import 'package:frontend/screens/home/post_detail_screen.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../models/post_model.dart';
 import '../blocs/post/post_bloc.dart';
 import '../blocs/post/post_event.dart';
 import '../screens/home/profile_screen.dart';
 import 'cached_image.dart';
+import 'video_player_widget.dart';
 
 class PostCard extends StatelessWidget {
   final PostModel post;
@@ -26,6 +28,7 @@ class PostCard extends StatelessWidget {
     final bool hasDisliked = user != null
         ? (post.dislikes.contains(user.id) || post.hasDisliked)
         : false;
+    
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
@@ -80,36 +83,35 @@ class PostCard extends StatelessWidget {
             ),
           ),
 
-          // Media
+          // Media - Now clickable to navigate to post detail
           if (post.media.isNotEmpty)
-            SizedBox(
-              height: 400,
-              child: PageView.builder(
-                itemCount: post.media.length,
-                itemBuilder: (context, index) {
-                  final media = post.media[index];
-                  if (media.type == 'image') {
-                    return CachedImage(imageUrl: media.url, fit: BoxFit.cover);
-                  } else {
-                    return Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (media.thumbnail != null)
-                          CachedImage(
-                            imageUrl: media.thumbnail!,
-                            fit: BoxFit.cover,
-                          ),
-                        const Center(
-                          child: Icon(
-                            Icons.play_circle_outline,
-                            size: 64,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-                },
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PostDetailScreen(postId: post.id),
+                  ),
+                );
+              },
+              child: SizedBox(
+                height: 400,
+                child: PageView.builder(
+                  itemCount: post.media.length,
+                  itemBuilder: (context, index) {
+                    final media = post.media[index];
+                    if (media.type == 'image') {
+                      return CachedImage(imageUrl: media.url, fit: BoxFit.cover);
+                    } else {
+                      // Video with auto-play functionality
+                      return VideoPlayerWidget(
+                        videoUrl: media.url,
+                        thumbnail: media.thumbnail,
+                        autoPlay: true,
+                      );
+                    }
+                  },
+                ),
               ),
             ),
 
@@ -146,14 +148,6 @@ class PostCard extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.comment_outlined),
                     onPressed: () => _showComments(context),
-                    // onPressed: () {
-                    //   Navigator.push(
-                    //     context,
-                    //     MaterialPageRoute(
-                    //       builder: (_) => PostDetailScreen(postId: post.id),
-                    //     ),
-                    //   );
-                    // },
                   ),
                 if (showComments) Text(post.commentsCount.toString()),
                 const Spacer(),
@@ -216,10 +210,71 @@ class PostCard extends StatelessWidget {
   void _showComments(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      constraints: const BoxConstraints.expand(),
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        return CommentsScreen(postId: post.id);
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6, // 60% of screen height
+          minChildSize: 0.3,
+          maxChildSize: 0.9,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  // Title
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Comments',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  // Comments content
+                  Expanded(
+                    child: CommentsScreen(
+                      postId: post.id,
+                      isBottomSheet: true,
+                      scrollController: scrollController,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
       },
     );
   }
