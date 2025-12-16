@@ -6,12 +6,14 @@ class UserListTile extends StatelessWidget {
   final UserModel user;
   final VoidCallback? onTap;
   final Widget? trailing;
+  final bool isCurrentUser;
 
   const UserListTile({
     super.key,
     required this.user,
     this.onTap,
     this.trailing,
+    this.isCurrentUser = false,
   });
 
   @override
@@ -35,7 +37,7 @@ class UserListTile extends StatelessWidget {
           ],
         ],
       ),
-      subtitle: Text(user.fullName, overflow: TextOverflow.ellipsis),
+      subtitle: Text(isCurrentUser ? "You" : user.fullName, overflow: TextOverflow.ellipsis),
       trailing: trailing,
       onTap: onTap,
     );
