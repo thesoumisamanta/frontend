@@ -82,6 +82,46 @@ class UserModel {
       'createdAt': createdAt.toIso8601String(),
     };
   }
+
+  UserModel copyWith({
+    String? id,
+    String? username,
+    String? email,
+    String? fullName,
+    String? accountType,
+    String? bio,
+    ProfilePicture? profilePicture,
+    CoverPhoto? coverPhoto,
+    String? location,
+    String? website,
+    String? businessEmail,
+    int? followersCount,
+    int? followingCount,
+    int? postsCount,
+    bool? isVerified,
+    bool? isPrivate,
+    DateTime? createdAt,
+  }) {
+    return UserModel(
+      id: id ?? this.id,
+      username: username ?? this.username,
+      email: email ?? this.email,
+      fullName: fullName ?? this.fullName,
+      accountType: accountType ?? this.accountType,
+      bio: bio ?? this.bio,
+      profilePicture: profilePicture ?? this.profilePicture,
+      coverPhoto: coverPhoto ?? this.coverPhoto,
+      location: location ?? this.location,
+      website: website ?? this.website,
+      businessEmail: businessEmail ?? this.businessEmail,
+      followersCount: followersCount ?? this.followersCount,
+      followingCount: followingCount ?? this.followingCount,
+      postsCount: postsCount ?? this.postsCount,
+      isVerified: isVerified ?? this.isVerified,
+      isPrivate: isPrivate ?? this.isPrivate,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 }
 
 class ProfilePicture {

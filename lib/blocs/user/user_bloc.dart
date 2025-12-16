@@ -39,42 +39,42 @@ class UserBloc extends Bloc<UserEvent, UserState> {
   }
 
   // blocs/user/user_bloc.dart
-Future<void> _onUserUpdateProfile(
-  UserUpdateProfile event,
-  Emitter<UserState> emit,
-) async {
-  try {
-    emit(UserLoading());
+  Future<void> _onUserUpdateProfile(
+    UserUpdateProfile event,
+    Emitter<UserState> emit,
+  ) async {
+    try {
+      emit(UserLoading());
 
-    // If there are images to upload, use the appropriate API method
-    if (event.profileImage != null || event.coverImage != null) {
-      final response = await apiService.updateProfileWithImages(
-        data: event.data,
-        profileImage: event.profileImage,
-        coverImage: event.coverImage,
-      );
+      // If there are images to upload, use the appropriate API method
+      if (event.profileImage != null || event.coverImage != null) {
+        final response = await apiService.updateProfileWithImages(
+          data: event.data,
+          profileImage: event.profileImage,
+          coverImage: event.coverImage,
+        );
 
-      if (response['success'] == true) {
-        final user = UserModel.fromJson(response['user']);
-        emit(UserProfileUpdated(user));
+        if (response['success'] == true) {
+          final user = UserModel.fromJson(response['user']);
+          emit(UserProfileUpdated(user));
+        } else {
+          emit(UserError(response['message'] ?? 'Failed to update profile'));
+        }
       } else {
-        emit(UserError(response['message'] ?? 'Failed to update profile'));
-      }
-    } else {
-      // No images, just update data
-      final response = await apiService.updateProfile(event.data);
+        // No images, just update data
+        final response = await apiService.updateProfile(event.data);
 
-      if (response['success'] == true) {
-        final user = UserModel.fromJson(response['user']);
-        emit(UserProfileUpdated(user));
-      } else {
-        emit(UserError(response['message'] ?? 'Failed to update profile'));
+        if (response['success'] == true) {
+          final user = UserModel.fromJson(response['user']);
+          emit(UserProfileUpdated(user));
+        } else {
+          emit(UserError(response['message'] ?? 'Failed to update profile'));
+        }
       }
+    } catch (e) {
+      emit(UserError(e.toString()));
     }
-  } catch (e) {
-    emit(UserError(e.toString()));
   }
-}
 
   Future<void> _onUserFollowToggle(
     UserFollowToggle event,
@@ -83,18 +83,59 @@ Future<void> _onUserUpdateProfile(
     try {
       final currentState = state;
 
-      final response = await apiService.followUnfollowUser(event.userId);
-
-      if (response['success'] == true) {
-        // Update the state if we're viewing this user's profile
-        if (currentState is UserProfileLoaded &&
-            currentState.user.id == event.userId) {
-          emit(currentState.copyWith(isFollowing: response['isFollowing']));
-        } else {
+      // Early exit if not viewing this profile
+      if (currentState is! UserProfileLoaded ||
+          currentState.user.id != event.userId) {
+        // Still make the API call
+        final response = await apiService.followUnfollowUser(event.userId);
+        if (response['success'] == true) {
           emit(UserActionSuccess(response['message']));
         }
-      } else {
-        emit(UserError(response['message'] ?? 'Failed to follow/unfollow'));
+        return;
+      }
+
+      // Store original state for rollback
+      final originalUser = currentState.user;
+      final originalIsFollowing = currentState.isFollowing;
+
+      // Optimistically update UI immediately
+      final newFollowersCount = originalIsFollowing
+          ? originalUser.followersCount -
+                1 // Unfollowing
+          : originalUser.followersCount + 1; // Following
+
+      final updatedUser = originalUser.copyWith(
+        followersCount: newFollowersCount,
+      );
+
+      emit(
+        UserProfileLoaded(user: updatedUser, isFollowing: !originalIsFollowing),
+      );
+
+      // Make API call
+      try {
+        final response = await apiService.followUnfollowUser(event.userId);
+
+        if (response['success'] != true) {
+          // Rollback on failure
+          emit(
+            UserProfileLoaded(
+              user: originalUser,
+              isFollowing: originalIsFollowing,
+            ),
+          );
+          emit(UserError(response['message'] ?? 'Failed to follow/unfollow'));
+        }
+        // Success - UI already updated optimistically
+      } catch (apiError) {
+        // Rollback on error
+        emit(
+          UserProfileLoaded(
+            user: originalUser,
+            isFollowing: originalIsFollowing,
+          ),
+        );
+        rethrow;
       }
     } catch (e) {
       emit(UserError(e.toString()));
