@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:frontend/blocs/auth/auth_event.dart';
 import 'package:frontend/blocs/comment/comment_bloc.dart';
+import 'package:frontend/firebase_options.dart';
 import 'package:frontend/utils/constants.dart';
 import 'services/secure_storage_service.dart';
 import 'services/api_service.dart';
@@ -29,9 +30,13 @@ void main() async {
   
   
   // Uncomment when you're ready for Firebase
-  // await Firebase.initializeApp();
-  // FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  // await NotificationService.initialize();
+  await Firebase.initializeApp(
+
+    options: DefaultFirebaseOptions.currentPlatform,
+
+);
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await NotificationService.initialize();
 
   // Initialize BLoC Observer for debugging
   Bloc.observer = AppBlocObserver();
