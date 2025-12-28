@@ -26,6 +26,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       emit(AuthLoading());
 
+      await apiService.warmUpServer();
+
       final isLoggedIn = await secureStorage.isLoggedIn();
 
       if (isLoggedIn) {

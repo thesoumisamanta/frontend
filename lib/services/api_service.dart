@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import '../utils/constants.dart';
@@ -14,8 +13,8 @@ class ApiService {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConstants.apiUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 60),
         headers: {'Content-Type': 'application/json'},
       ),
     );
@@ -30,14 +29,22 @@ class ApiService {
     );
   }
 
-  // Get headers with token
-  Future<Map<String, String>> _getHeaders() async {
-    final accessToken = await _secureStorage.getAccessToken();
-    return {
-      'Content-Type': 'application/json',
-      if (accessToken != null) 'Cookie': 'accessToken=$accessToken',
-    };
+  Future<void> warmUpServer() async {
+    try {
+      await _dio.get(AppConstants.healthEndpoint);
+    } catch (_) {
+      // Ignore errors — purpose is only to wake the server
+    }
   }
+
+  // Get headers with token
+  // Future<Map<String, String>> _getHeaders() async {
+  //   final accessToken = await _secureStorage.getAccessToken();
+  //   return {
+  //     'Content-Type': 'application/json',
+  //     if (accessToken != null) 'Cookie': 'accessToken=$accessToken',
+  //   };
+  // }
 
   // Auth APIs
   Future<Map<String, dynamic>> register({
@@ -328,7 +335,6 @@ class ApiService {
       throw _handleError(e);
     }
   }
-
 
   Future<Map<String, dynamic>> likeComment(String commentId) async {
     try {

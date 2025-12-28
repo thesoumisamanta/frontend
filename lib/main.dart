@@ -5,7 +5,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:frontend/blocs/auth/auth_event.dart';
 import 'package:frontend/blocs/comment/comment_bloc.dart';
 import 'package:frontend/firebase_options.dart';
-import 'package:frontend/utils/constants.dart';
 import 'services/secure_storage_service.dart';
 import 'services/api_service.dart';
 import 'services/notification_service.dart';
@@ -22,7 +21,6 @@ import 'utils/bloc_observer.dart';
 // Background message handler
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  print('Background message: ${message.messageId}');
 }
 
 void main() async {

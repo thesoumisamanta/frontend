@@ -2,6 +2,9 @@ class AppConstants {
   // API Endpoints
   static String get apiUrl => 'https://backend-r9e6.onrender.com/api';
 
+  //warm up endpoint
+  static String get healthEndpoint => '$apiUrl/health';
+
   // Auth Endpoints
   static String get loginEndpoint => '$apiUrl/auth/login';
   static String get registerEndpoint => '$apiUrl/auth/register';
