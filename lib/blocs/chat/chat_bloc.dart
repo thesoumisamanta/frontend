@@ -152,7 +152,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   ) async {
     try {
       await apiService.markMessagesAsRead(event.chatId);
-      emit(ChatMarkedAsRead(event.chatId));
+      // emit(ChatMarkedAsRead(event.chatId));
     } catch (e) {
       // Silently fail
       print('Error marking messages as read: $e');

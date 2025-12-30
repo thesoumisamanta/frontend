@@ -39,7 +39,7 @@ class _SplashScreenState extends State<SplashScreen> {
               ],
             ),
           ),
-          child: Center(
+          child: const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -48,7 +48,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   size: 100,
                   color: Colors.white,
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: 20),
                 Text(
                   'Travel Diary',
                   style: TextStyle(
@@ -57,8 +57,8 @@ class _SplashScreenState extends State<SplashScreen> {
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 40),
-                const CircularProgressIndicator(
+                SizedBox(height: 40),
+                CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               ],
