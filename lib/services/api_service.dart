@@ -13,8 +13,9 @@ class ApiService {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConstants.apiUrl,
-        connectTimeout: const Duration(seconds: 60),
-        receiveTimeout: const Duration(seconds: 60),
+        connectTimeout: const Duration(seconds: 30), // Reduced from 60
+        receiveTimeout: const Duration(seconds: 30), // Reduced from 60
+        sendTimeout: const Duration(seconds: 30), // Added send timeout
         headers: {'Content-Type': 'application/json'},
       ),
     );
@@ -29,24 +30,35 @@ class ApiService {
     );
   }
 
+  // Optimized warm up with shorter timeout and no blocking
   Future<void> warmUpServer() async {
     try {
-      await _dio.get(AppConstants.healthEndpoint);
-    } catch (_) {
-      // Ignore errors — purpose is only to wake the server
+      // Use a very short timeout for health check
+      // Don't wait for this - let it happen in background
+      await _dio.get(
+        AppConstants.healthEndpoint,
+        options: Options(
+          receiveTimeout: const Duration(seconds: 10), // Shorter timeout for warmup
+          sendTimeout: const Duration(seconds: 10),
+        ),
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          print('Health check timeout - server may be sleeping');
+          // Return a dummy response to avoid blocking
+          return Response(
+            requestOptions: RequestOptions(path: AppConstants.healthEndpoint),
+            statusCode: 503,
+          );
+        },
+      );
+    } catch (e) {
+      // Silently fail - warmup is not critical
+      print('Server warmup failed (non-critical): $e');
     }
   }
 
-  // Get headers with token
-  // Future<Map<String, String>> _getHeaders() async {
-  //   final accessToken = await _secureStorage.getAccessToken();
-  //   return {
-  //     'Content-Type': 'application/json',
-  //     if (accessToken != null) 'Cookie': 'accessToken=$accessToken',
-  //   };
-  // }
-
-  // Auth APIs
+  // Auth APIs with optimized timeouts
   Future<Map<String, dynamic>> register({
     required String username,
     required String email,
@@ -64,6 +76,9 @@ class ApiService {
           'fullName': fullName,
           'accountType': accountType,
         },
+        options: Options(
+          receiveTimeout: const Duration(seconds: 45), // Longer for registration
+        ),
       );
       return response.data;
     } catch (e) {
@@ -79,6 +94,9 @@ class ApiService {
       final response = await _dio.post(
         '/auth/login',
         data: {'emailOrUsername': emailOrUsername, 'password': password},
+        options: Options(
+          receiveTimeout: const Duration(seconds: 45), // Longer for login
+        ),
       );
       return response.data;
     } catch (e) {
@@ -96,7 +114,10 @@ class ApiService {
 
       final response = await _dio.post(
         '/auth/refresh-token',
-        options: Options(headers: {'Cookie': 'refreshToken=$refreshToken'}),
+        options: Options(
+          headers: {'Cookie': 'refreshToken=$refreshToken'},
+          receiveTimeout: const Duration(seconds: 20),
+        ),
       );
       return response.data;
     } catch (e) {
@@ -106,7 +127,12 @@ class ApiService {
 
   Future<Map<String, dynamic>> logout() async {
     try {
-      final response = await _dio.get('/auth/logout');
+      final response = await _dio.get(
+        '/auth/logout',
+        options: Options(
+          receiveTimeout: const Duration(seconds: 15),
+        ),
+      );
       return response.data;
     } catch (e) {
       throw _handleError(e);
@@ -115,7 +141,12 @@ class ApiService {
 
   Future<Map<String, dynamic>> getMe() async {
     try {
-      final response = await _dio.get('/auth/me');
+      final response = await _dio.get(
+        '/auth/me',
+        options: Options(
+          receiveTimeout: const Duration(seconds: 20),
+        ),
+      );
       return response.data;
     } catch (e) {
       throw _handleError(e);
@@ -124,7 +155,13 @@ class ApiService {
 
   Future<void> updateFCMToken(String fcmToken) async {
     try {
-      await _dio.put('/auth/fcm-token', data: {'fcmToken': fcmToken});
+      await _dio.put(
+        '/auth/fcm-token',
+        data: {'fcmToken': fcmToken},
+        options: Options(
+          receiveTimeout: const Duration(seconds: 15),
+        ),
+      );
     } catch (e) {
       throw _handleError(e);
     }
@@ -215,7 +252,13 @@ class ApiService {
         );
       }
 
-      final response = await _dio.post('/posts', data: formData);
+      final response = await _dio.post(
+        '/posts',
+        data: formData,
+        options: Options(
+          receiveTimeout: const Duration(minutes: 2), // Longer for file upload
+        ),
+      );
       return response.data;
     } catch (e) {
       throw _handleError(e);
@@ -381,7 +424,13 @@ class ApiService {
         ),
       );
 
-      final response = await _dio.post('/stories', data: formData);
+      final response = await _dio.post(
+        '/stories',
+        data: formData,
+        options: Options(
+          receiveTimeout: const Duration(minutes: 2),
+        ),
+      );
       return response.data;
     } catch (e) {
       throw _handleError(e);
@@ -449,9 +498,7 @@ class ApiService {
     String? sharedPostId,
   }) async {
     try {
-      // Ensure Firebase is initialized before proceeding
       if (mediaFile != null) {
-        // Add a small delay to ensure Firebase is ready
         await Future.delayed(const Duration(milliseconds: 100));
       }
 
@@ -475,10 +522,13 @@ class ApiService {
       final response = await _dio.post(
         '/chats/$chatId/message',
         data: formData,
+        options: Options(
+          receiveTimeout: const Duration(seconds: 45),
+        ),
       );
       return response.data;
     } catch (e) {
-      print('Send message error: $e'); // Debug log
+      print('Send message error: $e');
       throw _handleError(e);
     }
   }
@@ -582,11 +632,13 @@ class ApiService {
         }
         return 'Server error: ${error.response?.statusCode}';
       } else if (error.type == DioExceptionType.connectionTimeout) {
-        return 'Connection timeout';
+        return 'Connection timeout. Please check your internet connection.';
       } else if (error.type == DioExceptionType.receiveTimeout) {
-        return 'Receive timeout';
+        return 'Server is taking too long to respond. Please try again.';
+      } else if (error.type == DioExceptionType.sendTimeout) {
+        return 'Failed to send request. Please try again.';
       } else {
-        return 'Network error occurred';
+        return 'Network error. Please check your internet connection.';
       }
     }
     return 'An unexpected error occurred';
@@ -600,12 +652,10 @@ class ApiService {
     try {
       FormData formData = FormData();
 
-      // Add text fields
       data.forEach((key, value) {
         formData.fields.add(MapEntry(key, value.toString()));
       });
 
-      // Add profile image if provided
       if (profileImage != null) {
         formData.files.add(
           MapEntry(
@@ -618,7 +668,6 @@ class ApiService {
         );
       }
 
-      // Add cover image if provided
       if (coverImage != null) {
         formData.files.add(
           MapEntry(
@@ -631,16 +680,19 @@ class ApiService {
         );
       }
 
-      final response = await _dio.put('/users/profile', data: formData);
+      final response = await _dio.put(
+        '/users/profile',
+        data: formData,
+        options: Options(
+          receiveTimeout: const Duration(minutes: 2),
+        ),
+      );
       return response.data;
     } catch (e) {
       throw _handleError(e);
     }
   }
 
-  // Add these methods to your ApiService class
-
-  // Get comment replies with pagination
   Future<Map<String, dynamic>> getCommentReplies(
     String commentId, {
     int page = 1,
@@ -657,7 +709,6 @@ class ApiService {
     }
   }
 
-  // Update comment
   Future<Map<String, dynamic>> updateComment(
     String commentId,
     String text,
@@ -673,7 +724,6 @@ class ApiService {
     }
   }
 
-  // Get users who liked a comment
   Future<Map<String, dynamic>> getCommentLikes(String commentId) async {
     try {
       final response = await _dio.get('/comments/$commentId/likes');
@@ -683,7 +733,6 @@ class ApiService {
     }
   }
 
-  // Get users who disliked a comment
   Future<Map<String, dynamic>> getCommentDislikes(String commentId) async {
     try {
       final response = await _dio.get('/comments/$commentId/dislikes');

@@ -51,6 +51,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     _postBloc.add(
       PostLoadUserPosts(userId: widget.userId, refresh: true),
     );
+    
+    // Check if the viewed user follows the current user back
+    _checkFollowBackStatus();
   }
 
   @override
@@ -59,8 +62,25 @@ class _ProfileScreenState extends State<ProfileScreen>
     super.dispose();
   }
 
+  void _checkFollowBackStatus() {
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      _userBloc.add(
+        UserCheckFollowBack(
+          currentUserId: authState.user.id,
+          targetUserId: widget.userId,
+        ),
+      );
+    }
+  }
+
   void _handleFollowToggle() {
     _userBloc.add(UserFollowToggle(widget.userId));
+    
+    // Recheck follow-back status after a delay
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _checkFollowBackStatus();
+    });
   }
 
   void _handleLogout() {
@@ -182,6 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               refresh: true,
                             ),
                           );
+                          _checkFollowBackStatus();
                         },
                         child: const Text('Retry'),
                       ),
@@ -192,6 +213,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
               if (state is UserProfileLoaded) {
                 final user = state.user;
+                
+                // Both users must follow each other for chat to be enabled
+                final canChat = state.isFollowing && state.followsBack;
 
                 return RefreshIndicator(
                   onRefresh: () async {
@@ -199,6 +223,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     _postBloc.add(
                       PostLoadUserPosts(userId: widget.userId, refresh: true),
                     );
+                    _checkFollowBackStatus();
                   },
                   child: CustomScrollView(
                     slivers: [
@@ -454,6 +479,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         _userBloc.add(
                                           UserLoadProfile(widget.userId),
                                         );
+                                        _checkFollowBackStatus();
                                       }
                                     });
                                   },
@@ -477,6 +503,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         _userBloc.add(
                                           UserLoadProfile(widget.userId),
                                         );
+                                        _checkFollowBackStatus();
                                       }
                                     });
                                   },
@@ -509,7 +536,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         child: Text(
                                           state.isFollowing
                                               ? 'Unfollow'
-                                              : 'Follow',
+                                              : (state.followsBack 
+                                                  ? 'Follow Back' 
+                                                  : 'Follow'),
                                           style: TextStyle(
                                             color: state.isFollowing
                                                 ? AppColors.primary
@@ -518,8 +547,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         ),
                                       ),
                                     ),
-                                    if (state.isFollowing &&
-                                        user.accountType != 'business') ...[
+                                    // Only show chat if both users follow each other AND not a business account
+                                    if (canChat && user.accountType != 'business') ...[
                                       const SizedBox(width: 8),
                                       ElevatedButton(
                                         onPressed: () {
@@ -528,12 +557,18 @@ class _ProfileScreenState extends State<ProfileScreen>
                                             MaterialPageRoute(
                                               builder: (_) => ChatScreen(
                                                 userId: widget.userId,
+                                                username: user.username,
+                                                profilePictureUrl: user.profilePicture.url,
                                               ),
                                             ),
                                           );
                                         },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primary,
+                                        ),
                                         child: const Icon(
                                           Icons.chat_bubble_outline,
+                                          color: Colors.white,
                                         ),
                                       ),
                                     ],

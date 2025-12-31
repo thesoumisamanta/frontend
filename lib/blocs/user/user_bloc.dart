@@ -14,6 +14,7 @@ class UserBloc extends Bloc<UserEvent, UserState> {
     on<UserSearchUsers>(_onUserSearchUsers);
     on<UserLoadFollowers>(_onUserLoadFollowers);
     on<UserLoadFollowing>(_onUserLoadFollowing);
+    on<UserCheckFollowBack>(_onUserCheckFollowBack);
   }
 
   UserProfileLoaded? _lastProfileLoadedState;
@@ -53,6 +54,7 @@ class UserBloc extends Bloc<UserEvent, UserState> {
         final newState = UserProfileLoaded(
           user: user,
           isFollowing: isFollowing,
+          followsBack: false, // Will be updated separately
         );
         _lastProfileLoadedState = newState; // Update cache
         emit(newState);
@@ -81,6 +83,36 @@ class UserBloc extends Bloc<UserEvent, UserState> {
       } else {
         emit(UserError(e.toString()));
       }
+    }
+  }
+
+  Future<void> _onUserCheckFollowBack(
+    UserCheckFollowBack event,
+    Emitter<UserState> emit,
+  ) async {
+    try {
+      final currentState = state;
+      
+      if (currentState is! UserProfileLoaded) {
+        return;
+      }
+
+      // Get the current user's followers to check if target user follows back
+      final response = await apiService.getFollowers(event.currentUserId);
+      
+      if (response['success'] == true) {
+        final List<dynamic> followersJson = response['followers'];
+        final followerIds = followersJson
+            .map((json) => json['_id'] as String)
+            .toList();
+        
+        final followsBack = followerIds.contains(event.targetUserId);
+        
+        emit(currentState.copyWith(followsBack: followsBack));
+      }
+    } catch (e) {
+      print('Error checking follow back status: $e');
+      // Don't emit error, this is not critical
     }
   }
 
@@ -145,8 +177,7 @@ class UserBloc extends Bloc<UserEvent, UserState> {
 
       // Optimistically update UI immediately
       final newFollowersCount = originalIsFollowing
-          ? originalUser.followersCount -
-                1 // Unfollowing
+          ? originalUser.followersCount - 1 // Unfollowing
           : originalUser.followersCount + 1; // Following
 
       final updatedUser = originalUser.copyWith(
@@ -154,7 +185,11 @@ class UserBloc extends Bloc<UserEvent, UserState> {
       );
 
       emit(
-        UserProfileLoaded(user: updatedUser, isFollowing: !originalIsFollowing),
+        UserProfileLoaded(
+          user: updatedUser,
+          isFollowing: !originalIsFollowing,
+          followsBack: currentState.followsBack,
+        ),
       );
 
       // Make API call
@@ -167,6 +202,7 @@ class UserBloc extends Bloc<UserEvent, UserState> {
             UserProfileLoaded(
               user: originalUser,
               isFollowing: originalIsFollowing,
+              followsBack: currentState.followsBack,
             ),
           );
           emit(UserError(response['message'] ?? 'Failed to follow/unfollow'));
@@ -178,6 +214,7 @@ class UserBloc extends Bloc<UserEvent, UserState> {
           UserProfileLoaded(
             user: originalUser,
             isFollowing: originalIsFollowing,
+            followsBack: currentState.followsBack,
           ),
         );
         rethrow;

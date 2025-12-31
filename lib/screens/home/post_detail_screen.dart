@@ -26,25 +26,44 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   String? _replyingToCommentId;
   String? _replyingToUsername;
   
-  // Store bloc references
   late final PostBloc _postBloc;
   late final CommentBloc _commentBloc;
+  
+  bool _isPostLoaded = false;
+  bool _areCommentsLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
     
-    // Get bloc references
     _postBloc = context.read<PostBloc>();
     _commentBloc = context.read<CommentBloc>();
 
-    // Load data using BLoCs
+    // Check if post is already loaded
+    final currentPostState = _postBloc.state;
+    if (currentPostState is PostSingleLoaded && 
+        currentPostState.post.id == widget.postId) {
+      _isPostLoaded = true;
+    }
+    
+    // Check if comments are already loaded
+    final currentCommentState = _commentBloc.state;
+    if (currentCommentState is CommentPostCommentsLoaded && 
+        currentCommentState.postId == widget.postId) {
+      _areCommentsLoaded = true;
+    }
+
+    // Load only if not already loaded
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _postBloc.add(PostLoadSingle(widget.postId));
-      _commentBloc.add(
-        CommentLoadPostComments(postId: widget.postId, refresh: true),
-      );
+      if (!_isPostLoaded) {
+        _postBloc.add(PostLoadSingle(widget.postId));
+      }
+      if (!_areCommentsLoaded) {
+        _commentBloc.add(
+          CommentLoadPostComments(postId: widget.postId, refresh: true),
+        );
+      }
     });
   }
 
@@ -103,50 +122,34 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: SizedBox(
-          height: 100,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.arrow_back),
-              ),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12.0),
-                child: Text('Post'),
-              ),
-            ],
-          ),
-        ),
-        toolbarHeight: 100,
-        automaticallyImplyLeading: false,
+        title: const Text('Post'),
+        automaticallyImplyLeading: true,
       ),
       body: Column(
         children: [
-          // Post - Using BLoC now
+          // Post Section
           BlocBuilder<PostBloc, PostState>(
             bloc: _postBloc,
             builder: (context, state) {
-              if (state is PostLoading) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(20.0),
-                    child: CircularProgressIndicator(),
-                  ),
+              // Show loading only if not already loaded
+              if (state is PostLoading && !_isPostLoaded) {
+                return const Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: Center(child: CircularProgressIndicator()),
                 );
               }
 
               if (state is PostSingleLoaded) {
+                _isPostLoaded = true;
                 return PostCard(post: state.post, showComments: false);
               }
 
               if (state is PostError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
+                return Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Center(
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(
                           Icons.error_outline,
@@ -168,13 +171,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 );
               }
 
-              return const Center(child: Text('Post not found'));
+              // If we have loaded state cached, don't show "not found"
+              if (_isPostLoaded) {
+                return const SizedBox.shrink();
+              }
+
+              return const Padding(
+                padding: EdgeInsets.all(20.0),
+                child: Center(child: Text('Post not found')),
+              );
             },
           ),
 
           const Divider(height: 1),
 
-          // Comments
+          // Comments Section
           Expanded(
             child: BlocConsumer<CommentBloc, CommentState>(
               bloc: _commentBloc,
@@ -194,7 +205,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(state.message)),
                   );
-                  // Refresh comments after action
                   _commentBloc.add(
                     CommentLoadPostComments(
                       postId: widget.postId,
@@ -204,17 +214,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 }
               },
               buildWhen: (previous, current) {
-                // Only rebuild when CommentPostCommentsLoaded changes
-                // Ignore CommentRepliesLoaded to prevent hiding comments
                 return current is CommentLoading ||
                     current is CommentPostCommentsLoaded;
               },
               builder: (context, state) {
-                if (state is CommentLoading) {
+                // Show loading only if not already loaded
+                if (state is CommentLoading && !_areCommentsLoaded) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
                 if (state is CommentPostCommentsLoaded) {
+                  _areCommentsLoaded = true;
+                  
                   if (state.comments.isEmpty) {
                     return const Center(
                       child: Column(
@@ -267,6 +278,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   );
                 }
 
+                // If we have loaded comments cached, don't show empty
+                if (_areCommentsLoaded) {
+                  return const SizedBox.shrink();
+                }
+
                 return const SizedBox.shrink();
               },
             ),
@@ -291,7 +307,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Replying indicator
               if (_replyingToUsername != null)
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -327,7 +342,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
               if (_replyingToUsername != null) const SizedBox(height: 8),
 
-              // Comment input row
               Row(
                 children: [
                   Expanded(

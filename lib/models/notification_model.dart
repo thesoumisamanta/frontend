@@ -32,13 +32,29 @@ class NotificationModel {
       sender: UserModel.fromJson(json['sender']),
       type: json['type'] ?? '',
       message: json['message'] ?? '',
-      post: json['post']?['_id'],
-      comment: json['comment']?['_id'],
-      story: json['story']?['_id'],
+      // FIXED: Handle both object and string formats
+      post: _extractId(json['post']),
+      comment: _extractId(json['comment']),
+      story: _extractId(json['story']),
       isRead: json['isRead'] ?? false,
       createdAt: DateTime.parse(
           json['createdAt'] ?? DateTime.now().toIso8601String()),
     );
+  }
+
+  // Helper method to extract ID from either string or object
+  static String? _extractId(dynamic value) {
+    if (value == null) return null;
+    
+    // If it's already a string, return it
+    if (value is String) return value;
+    
+    // If it's an object/map, extract the _id field
+    if (value is Map<String, dynamic>) {
+      return value['_id'] as String?;
+    }
+    
+    return null;
   }
 
   Map<String, dynamic> toJson() {

@@ -15,16 +15,26 @@ class UserLoading extends UserState {}
 class UserProfileLoaded extends UserState {
   final UserModel user;
   final bool isFollowing;
+  final bool followsBack;
 
-  const UserProfileLoaded({required this.user, required this.isFollowing});
+  const UserProfileLoaded({
+    required this.user,
+    required this.isFollowing,
+    this.followsBack = false,
+  });
 
   @override
-  List<Object?> get props => [user, isFollowing];
+  List<Object?> get props => [user, isFollowing, followsBack];
 
-  UserProfileLoaded copyWith({UserModel? user, bool? isFollowing}) {
+  UserProfileLoaded copyWith({
+    UserModel? user,
+    bool? isFollowing,
+    bool? followsBack,
+  }) {
     return UserProfileLoaded(
       user: user ?? this.user,
       isFollowing: isFollowing ?? this.isFollowing,
+      followsBack: followsBack ?? this.followsBack,
     );
   }
 }

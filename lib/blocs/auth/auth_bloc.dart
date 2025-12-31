@@ -11,7 +11,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final SecureStorageService secureStorage;
 
   AuthBloc({required this.apiService, required this.secureStorage})
-    : super(AuthInitial()) {
+      : super(AuthInitial()) {
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<AuthLoginRequested>(_onAuthLoginRequested);
     on<AuthRegisterRequested>(_onAuthRegisterRequested);
@@ -26,12 +26,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       emit(AuthLoading());
 
-      await apiService.warmUpServer();
+      // Warm up server in the background without waiting
+      // This allows the app to start faster
+      apiService.warmUpServer().catchError((e) {
+        print('Server warm up error (non-blocking): $e');
+      });
 
       final isLoggedIn = await secureStorage.isLoggedIn();
 
       if (isLoggedIn) {
-        // Try to get user data from API
+        // Try to get user data from API with a shorter timeout
         try {
           final response = await apiService.getMe();
 
@@ -48,12 +52,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
               profilePicture: user.profilePicture.url,
             );
 
-            // Get and update FCM token
-            final fcmToken = await NotificationService.getToken();
-            if (fcmToken != null) {
-              await apiService.updateFCMToken(fcmToken);
-              await secureStorage.saveFCMToken(fcmToken);
-            }
+            // Get and update FCM token in background
+            _updateFCMTokenInBackground();
 
             emit(AuthAuthenticated(user));
           } else {
@@ -61,6 +61,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
             emit(AuthUnauthenticated());
           }
         } catch (e) {
+          print('Initial auth check failed: $e');
+          
           // If API call fails but we have refresh token, try to refresh
           final refreshToken = await secureStorage.getRefreshToken();
 
@@ -79,15 +81,30 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
                 final response = await apiService.getMe();
                 if (response['success'] == true) {
                   final user = UserModel.fromJson(response['user']);
+                  
+                  // Save user data
+                  await secureStorage.saveUserData(
+                    userId: user.id,
+                    username: user.username,
+                    email: user.email,
+                    fullName: user.fullName,
+                    accountType: user.accountType,
+                    profilePicture: user.profilePicture.url,
+                  );
+                  
+                  // Update FCM token in background
+                  _updateFCMTokenInBackground();
+                  
                   emit(AuthAuthenticated(user));
                   return;
                 }
               }
-            } catch (e) {
-              print('Token refresh failed: $e');
+            } catch (refreshError) {
+              print('Token refresh failed: $refreshError');
             }
           }
 
+          // If all else fails, log out
           await secureStorage.clearAll();
           emit(AuthUnauthenticated());
         }
@@ -134,12 +151,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           profilePicture: user.profilePicture.url,
         );
 
-        // Get and update FCM token
-        final fcmToken = await NotificationService.getToken();
-        if (fcmToken != null) {
-          await apiService.updateFCMToken(fcmToken);
-          await secureStorage.saveFCMToken(fcmToken);
-        }
+        // Get and update FCM token in background
+        _updateFCMTokenInBackground();
 
         emit(AuthAuthenticated(user));
       } else {
@@ -186,12 +199,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           profilePicture: user.profilePicture.url,
         );
 
-        // Get and update FCM token
-        final fcmToken = await NotificationService.getToken();
-        if (fcmToken != null) {
-          await apiService.updateFCMToken(fcmToken);
-          await secureStorage.saveFCMToken(fcmToken);
-        }
+        // Get and update FCM token in background
+        _updateFCMTokenInBackground();
 
         emit(AuthAuthenticated(user));
       } else {
@@ -230,5 +239,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     } catch (e) {
       print('Error updating FCM token: $e');
     }
+  }
+
+  // Helper method to update FCM token in background without blocking UI
+  void _updateFCMTokenInBackground() {
+    NotificationService.getToken().then((fcmToken) {
+      if (fcmToken != null) {
+        apiService.updateFCMToken(fcmToken).then((_) {
+          secureStorage.saveFCMToken(fcmToken);
+        }).catchError((e) {
+          print('Background FCM token update error: $e');
+        });
+      }
+    }).catchError((e) {
+      print('Error getting FCM token: $e');
+    });
   }
 }

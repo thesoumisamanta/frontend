@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:frontend/blocs/auth/auth_bloc.dart';
 import 'package:frontend/blocs/auth/auth_state.dart';
+import 'package:frontend/blocs/comment/comment_bloc.dart';
+import 'package:frontend/blocs/post/post_bloc.dart';
 import 'package:frontend/screens/home/comments_screen.dart';
 import 'package:frontend/screens/home/post_detail_screen.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:visibility_detector/visibility_detector.dart';
 import '../models/post_model.dart';
-import '../blocs/post/post_bloc.dart';
 import '../blocs/post/post_event.dart';
 import '../screens/home/profile_screen.dart';
+import '../blocs/user/user_bloc.dart';
 import 'cached_image.dart';
 import 'video_player_widget.dart';
 
@@ -18,6 +20,36 @@ class PostCard extends StatelessWidget {
   final bool showComments;
 
   const PostCard({super.key, required this.post, this.showComments = true});
+
+  void _navigateToPostDetail(BuildContext context) {
+    // Force all videos to update their visibility (this will pause/dispose them)
+    VisibilityDetectorController.instance.notifyNow();
+    
+    // Small delay to ensure cleanup happens
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (context.mounted) {
+        // Get bloc references
+        final postBloc = context.read<PostBloc>();
+        final commentBloc = context.read<CommentBloc>();
+        
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MultiBlocProvider(
+              providers: [
+                BlocProvider.value(value: postBloc),
+                BlocProvider.value(value: commentBloc),
+              ],
+              child: PostDetailScreen(postId: post.id),
+            ),
+          ),
+        ).then((_) {
+          // When returning, trigger visibility update again
+          VisibilityDetectorController.instance.notifyNow();
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,10 +69,19 @@ class PostCard extends StatelessWidget {
         ListTile(
           leading: GestureDetector(
             onTap: () {
+              final userBloc = context.read<UserBloc>();
+              final postBloc = context.read<PostBloc>();
+              
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ProfileScreen(userId: post.user.id),
+                  builder: (_) => MultiBlocProvider(
+                    providers: [
+                      BlocProvider.value(value: userBloc),
+                      BlocProvider.value(value: postBloc),
+                    ],
+                    child: ProfileScreen(userId: post.user.id),
+                  ),
                 ),
               );
             },
@@ -82,19 +123,10 @@ class PostCard extends StatelessWidget {
           ),
         ),
 
-        // Media - Now clickable to navigate to post detail
+        // Media
         if (post.media.isNotEmpty)
           GestureDetector(
-            onTap: () {
-              // STOP VIDEO BEFORE NAVIGATION
-              VisibilityDetectorController.instance.notifyNow();
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => PostDetailScreen(postId: post.id),
-                ),
-              );
-            },
+            onTap: () => _navigateToPostDetail(context),
             child: SizedBox(
               height: 400,
               child: PageView.builder(
@@ -106,11 +138,11 @@ class PostCard extends StatelessWidget {
                   if (media.type == 'image') {
                     return CachedImage(imageUrl: media.url, fit: BoxFit.cover);
                   } else {
-                    // Video with auto-play functionality
+                    // Video - will only initialize when visible
                     return VideoPlayerWidget(
                       videoUrl: media.url,
                       thumbnail: media.thumbnail,
-                      autoPlay: true,
+                      autoPlay: false, // Changed to false - user must tap to play
                     );
                   }
                 },
@@ -122,26 +154,9 @@ class PostCard extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Caption
-              if (post.caption.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: RichText(
-                    text: TextSpan(
-                      style: TextStyle(
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: '${post.user.username} ',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(text: post.caption),
-                      ],
-                    ),
-                  ),
-                ),
+              // Action buttons
               Row(
                 children: [
                   IconButton(
@@ -183,31 +198,34 @@ class PostCard extends StatelessWidget {
                   ),
                 ],
               ),
+              
+              // Caption
+              if (post.caption.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 8.0,
+                  ),
+                  child: RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: '${post.user.username} ',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        TextSpan(text: post.caption),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
 
-        // // Tags
-        // if (post.tags.isNotEmpty)
-        //   Padding(
-        //     padding: const EdgeInsets.symmetric(
-        //       horizontal: 16.0,
-        //       vertical: 8.0,
-        //     ),
-        //     child: Wrap(
-        //       spacing: 8,
-        //       children: post.tags
-        //           .map(
-        //             (tag) => Text(
-        //               '#$tag',
-        //               style: TextStyle(color: Colors.blue[700]),
-        //             ),
-        //           )
-        //           .toList(),
-        //     ),
-        //   ),
-
-        // const SizedBox(height: 8),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -219,7 +237,7 @@ class PostCard extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (context) {
         return DraggableScrollableSheet(
-          initialChildSize: 0.6, // 60% of screen height
+          initialChildSize: 0.6,
           minChildSize: 0.3,
           maxChildSize: 0.9,
           builder: (context, scrollController) {
@@ -233,7 +251,6 @@ class PostCard extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  // Handle bar
                   Container(
                     margin: const EdgeInsets.symmetric(vertical: 8),
                     width: 40,
@@ -243,7 +260,6 @@ class PostCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  // Title
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -267,7 +283,6 @@ class PostCard extends StatelessWidget {
                     ),
                   ),
                   const Divider(height: 1),
-                  // Comments content
                   Expanded(
                     child: CommentsScreen(
                       postId: post.id,

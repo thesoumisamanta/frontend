@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -7,6 +8,7 @@ import '../../blocs/notification/notification_state.dart';
 import '../../blocs/user/user_bloc.dart';
 import '../../blocs/post/post_bloc.dart';
 import '../../blocs/comment/comment_bloc.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/cached_image.dart';
 import 'profile_screen.dart';
 import 'post_detail_screen.dart';
@@ -26,6 +28,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   late final UserBloc _userBloc;
   late final PostBloc _postBloc;
   late final CommentBloc _commentBloc;
+  
+  // Add subscription for real-time notifications
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
 
   @override
   void initState() {
@@ -43,11 +48,29 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (currentState is! NotificationLoaded) {
       _notificationBloc.add(const NotificationLoad(refresh: true));
     }
+    
+    // Listen to incoming notifications from Firebase
+    _notificationSubscription = NotificationService.onNotificationReceived.listen(
+      (data) {
+        print('New notification received in screen: $data');
+        
+        // Option 1: Add the notification directly to the bloc
+        // This is more efficient as it doesn't require a network call
+        if (data.isNotEmpty) {
+          _notificationBloc.add(NotificationAdd(data));
+        }
+        
+        // Option 2: Refresh the entire list from the server
+        // Uncomment this if you prefer to always have the latest data from server
+        // _notificationBloc.add(const NotificationLoad(refresh: true));
+      },
+    );
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _notificationSubscription?.cancel(); // Cancel the subscription
     super.dispose();
   }
 

@@ -129,7 +129,8 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
         );
       }
 
-      emit(NotificationMarkedAsRead(event.notificationId));
+      // REMOVED: emit(NotificationMarkedAsRead(event.notificationId));
+      // This was causing the state to be overwritten
     } catch (e) {
       emit(NotificationError(e.toString()));
     }
@@ -167,7 +168,8 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
         );
       }
 
-      emit(NotificationAllMarkedAsRead());
+      // REMOVED: emit(NotificationAllMarkedAsRead());
+      // This was causing the state to be overwritten
     } catch (e) {
       emit(NotificationError(e.toString()));
     }

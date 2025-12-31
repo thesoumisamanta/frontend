@@ -68,3 +68,13 @@ class UserLoadFollowing extends UserEvent {
   @override
   List<Object?> get props => [userId];
 }
+
+class UserCheckFollowBack extends UserEvent {
+  final String currentUserId;
+  final String targetUserId;
+
+  const UserCheckFollowBack({
+    required this.currentUserId,
+    required this.targetUserId,
+  });
+}

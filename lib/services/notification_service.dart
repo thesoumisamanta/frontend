@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,13 @@ class NotificationService {
   static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   static Function(Map<String, dynamic>)? _onNotificationTapCallback;
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  
+  // Add stream controller for notifications
+  static final StreamController<Map<String, dynamic>> _notificationController = 
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  static Stream<Map<String, dynamic>> get onNotificationReceived => 
+      _notificationController.stream;
 
   static Future<void> initialize() async {
     // Request permission
@@ -76,9 +84,11 @@ class NotificationService {
       print('Notification displayed: ${notification.title}');
       print('Notification body: ${notification.body}');
       
-      // Optional: You can also show an in-app banner using your existing packages
-      // For example, using fluttertoast:
-      // Fluttertoast.showToast(msg: '${notification.title}: ${notification.body}');
+      // Emit the notification data to the stream
+      if (message.data.isNotEmpty) {
+        print('Emitting notification data to stream: ${message.data}');
+        _notificationController.add(message.data);
+      }
     }
   }
 
@@ -170,5 +180,10 @@ class NotificationService {
   static Future<void> unsubscribeFromTopic(String topic) async {
     await _firebaseMessaging.unsubscribeFromTopic(topic);
     print('Unsubscribed from topic: $topic');
+  }
+
+  // Dispose the stream controller
+  static void dispose() {
+    _notificationController.close();
   }
 }
