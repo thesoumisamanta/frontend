@@ -5,6 +5,7 @@ import 'package:frontend/blocs/auth/auth_state.dart';
 import 'package:frontend/screens/home/comments_screen.dart';
 import 'package:frontend/screens/home/post_detail_screen.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:visibility_detector/visibility_detector.dart';
 import '../models/post_model.dart';
 import '../blocs/post/post_bloc.dart';
 import '../blocs/post/post_event.dart';
@@ -85,6 +86,8 @@ class PostCard extends StatelessWidget {
         if (post.media.isNotEmpty)
           GestureDetector(
             onTap: () {
+              // STOP VIDEO BEFORE NAVIGATION
+              VisibilityDetectorController.instance.notifyNow();
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -96,6 +99,8 @@ class PostCard extends StatelessWidget {
               height: 400,
               child: PageView.builder(
                 itemCount: post.media.length,
+                padEnds: false,
+                physics: const PageScrollPhysics(),
                 itemBuilder: (context, index) {
                   final media = post.media[index];
                   if (media.type == 'image') {

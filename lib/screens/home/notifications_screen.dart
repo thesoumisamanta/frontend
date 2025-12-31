@@ -4,6 +4,9 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../blocs/notification/notification_bloc.dart';
 import '../../blocs/notification/notification_event.dart';
 import '../../blocs/notification/notification_state.dart';
+import '../../blocs/user/user_bloc.dart';
+import '../../blocs/post/post_bloc.dart';
+import '../../blocs/comment/comment_bloc.dart';
 import '../../widgets/cached_image.dart';
 import 'profile_screen.dart';
 import 'post_detail_screen.dart';
@@ -17,11 +20,29 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final ScrollController _scrollController = ScrollController();
+  
+  // Store bloc references to avoid context issues
+  late final NotificationBloc _notificationBloc;
+  late final UserBloc _userBloc;
+  late final PostBloc _postBloc;
+  late final CommentBloc _commentBloc;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    
+    // Get bloc references
+    _notificationBloc = context.read<NotificationBloc>();
+    _userBloc = context.read<UserBloc>();
+    _postBloc = context.read<PostBloc>();
+    _commentBloc = context.read<CommentBloc>();
+    
+    // Only load if we don't have notifications already
+    final currentState = _notificationBloc.state;
+    if (currentState is! NotificationLoaded) {
+      _notificationBloc.add(const NotificationLoad(refresh: true));
+    }
   }
 
   @override
@@ -33,31 +54,65 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent * 0.9) {
-      final state = context.read<NotificationBloc>().state;
+      final state = _notificationBloc.state;
       if (state is NotificationLoaded && state.hasMore) {
-        context.read<NotificationBloc>().add(const NotificationLoad());
+        _notificationBloc.add(const NotificationLoad());
       }
     }
   }
 
   Future<void> _onRefresh() async {
-    context.read<NotificationBloc>().add(const NotificationLoad(refresh: true));
+    _notificationBloc.add(const NotificationLoad(refresh: true));
   }
 
-  void _handleNotificationTap(String notificationId, String type, String? postId) {
+  void _handleNotificationTap(
+    String notificationId,
+    String type,
+    String senderId,
+    String? postId,
+  ) {
     // Mark as read
-    context.read<NotificationBloc>().add(NotificationMarkAsRead(notificationId));
+    _notificationBloc.add(NotificationMarkAsRead(notificationId));
 
     // Navigate based on type
     if (type == 'follow') {
-      // Navigate to profile - would need sender ID
-    } else if (postId != null) {
+      // Navigate to the sender's profile
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => PostDetailScreen(postId: postId),
+          builder: (_) => MultiBlocProvider(
+            providers: [
+              BlocProvider.value(value: _userBloc),
+              BlocProvider.value(value: _postBloc),
+            ],
+            child: ProfileScreen(userId: senderId),
+          ),
         ),
-      );
+      ).then((_) {
+        // Refresh notifications when coming back
+        if (mounted) {
+          _notificationBloc.add(const NotificationLoad(refresh: true));
+        }
+      });
+    } else if (postId != null && (type == 'like' || type == 'comment' || type == 'dislike')) {
+      // Navigate to the post detail screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MultiBlocProvider(
+            providers: [
+              BlocProvider.value(value: _postBloc),
+              BlocProvider.value(value: _commentBloc),
+            ],
+            child: PostDetailScreen(postId: postId),
+          ),
+        ),
+      ).then((_) {
+        // Refresh notifications when coming back
+        if (mounted) {
+          _notificationBloc.add(const NotificationLoad(refresh: true));
+        }
+      });
     }
   }
 
@@ -68,13 +123,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         title: const Text('Notifications'),
         actions: [
           BlocBuilder<NotificationBloc, NotificationState>(
+            bloc: _notificationBloc,
             builder: (context, state) {
               if (state is NotificationLoaded && state.unreadCount > 0) {
                 return TextButton(
                   onPressed: () {
-                    context.read<NotificationBloc>().add(
-                          const NotificationMarkAllAsRead(),
-                        );
+                    _notificationBloc.add(const NotificationMarkAllAsRead());
                   },
                   child: const Text('Mark all read'),
                 );
@@ -87,8 +141,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: RefreshIndicator(
         onRefresh: _onRefresh,
         child: BlocBuilder<NotificationBloc, NotificationState>(
+          bloc: _notificationBloc,
           builder: (context, state) {
-            if (state is NotificationLoading) {
+            // Handle initial and loading states together
+            if (state is NotificationLoading || state is NotificationInitial) {
               return const Center(child: CircularProgressIndicator());
             }
 
@@ -159,14 +215,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   return ListTile(
                     leading: GestureDetector(
                       onTap: () {
+                        // Navigate to sender's profile
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => ProfileScreen(
-                              userId: notification.sender.id,
+                            builder: (_) => MultiBlocProvider(
+                              providers: [
+                                BlocProvider.value(value: _userBloc),
+                                BlocProvider.value(value: _postBloc),
+                              ],
+                              child: ProfileScreen(
+                                userId: notification.sender.id,
+                              ),
                             ),
                           ),
-                        );
+                        ).then((_) {
+                          if (mounted) {
+                            _notificationBloc.add(
+                              const NotificationLoad(refresh: true),
+                            );
+                          }
+                        });
                       },
                       child: CircleAvatar(
                         backgroundImage: CachedImageProvider(
@@ -207,6 +276,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     onTap: () => _handleNotificationTap(
                       notification.id,
                       notification.type,
+                      notification.sender.id,
                       notification.post,
                     ),
                   );
@@ -214,7 +284,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               );
             }
 
-            return const Center(child: Text('Something went wrong'));
+            // Fallback - show loading instead of error
+            return const Center(child: CircularProgressIndicator());
           },
         ),
       ),

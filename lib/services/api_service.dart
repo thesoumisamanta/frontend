@@ -449,10 +449,17 @@ class ApiService {
     String? sharedPostId,
   }) async {
     try {
+      // Ensure Firebase is initialized before proceeding
+      if (mediaFile != null) {
+        // Add a small delay to ensure Firebase is ready
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+
       FormData formData = FormData();
       if (text != null) formData.fields.add(MapEntry('text', text));
-      if (sharedPostId != null)
+      if (sharedPostId != null) {
         formData.fields.add(MapEntry('sharedPostId', sharedPostId));
+      }
       if (mediaFile != null) {
         formData.files.add(
           MapEntry(
@@ -471,6 +478,7 @@ class ApiService {
       );
       return response.data;
     } catch (e) {
+      print('Send message error: $e'); // Debug log
       throw _handleError(e);
     }
   }

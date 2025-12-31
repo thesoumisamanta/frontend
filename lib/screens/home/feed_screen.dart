@@ -98,14 +98,8 @@ class _FeedScreenState extends State<FeedScreen> {
             // Posts Section
             BlocBuilder<PostBloc, PostState>(
               builder: (context, state) {
-                // Handle initial state - show loading
-                if (state is PostInitial) {
-                  return const SliverFillRemaining(
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-
-                if (state is PostLoading) {
+                // Handle initial and loading states properly
+                if (state is PostInitial || state is PostLoading) {
                   return const SliverFillRemaining(
                     child: Center(child: CircularProgressIndicator()),
                   );
@@ -189,21 +183,9 @@ class _FeedScreenState extends State<FeedScreen> {
                   );
                 }
 
-                // Fallback for any unknown state
-                return SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text('Something went wrong'),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _onRefresh,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
+                // Fallback - show loading instead of error
+                return const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
                 );
               },
             ),

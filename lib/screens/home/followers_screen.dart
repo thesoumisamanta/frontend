@@ -85,7 +85,8 @@ class _FollowersScreenState extends State<FollowersScreen>
   Widget _buildFollowersList() {
     return BlocBuilder<UserBloc, UserState>(
       builder: (context, state) {
-        if (state is UserLoading) {
+        // Handle initial and loading states together
+        if (state is UserLoading || state is UserInitial) {
           return const Center(child: CircularProgressIndicator());
         }
 
@@ -147,7 +148,8 @@ class _FollowersScreenState extends State<FollowersScreen>
           );
         }
 
-        return const Center(child: Text('Something went wrong'));
+        // Fallback - show loading instead of error
+        return const Center(child: CircularProgressIndicator());
       },
     );
   }
@@ -155,7 +157,8 @@ class _FollowersScreenState extends State<FollowersScreen>
   Widget _buildFollowingList() {
     return BlocBuilder<UserBloc, UserState>(
       builder: (context, state) {
-        if (state is UserLoading) {
+        // Handle initial and loading states together
+        if (state is UserLoading || state is UserInitial) {
           return const Center(child: CircularProgressIndicator());
         }
 
@@ -217,7 +220,8 @@ class _FollowersScreenState extends State<FollowersScreen>
           );
         }
 
-        return const Center(child: Text('Something went wrong'));
+        // Fallback - show loading instead of error
+        return const Center(child: CircularProgressIndicator());
       },
     );
   }

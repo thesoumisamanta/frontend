@@ -24,43 +24,45 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   bool _hasError = false;
   bool _isPlaying = false;
   bool _shouldAutoPlay = false;
+  late VoidCallback _listener;
 
-  @override
-  void initState() {
-    super.initState();
-    _initializeVideo();
+  void _handleVisibilityChanged(VisibilityInfo info) {
+    if (info.visibleFraction >= 0.7) {
+      if (_controller == null) {
+        _initializeVideo();
+      }
+      _controller?.play();
+    } else if (info.visibleFraction < 0.3) {
+      _controller?.pause();
+      _disposeController();
+    }
   }
 
-  Future<void> _initializeVideo() async {
-    try {
-      _controller = VideoPlayerController.networkUrl(
-        Uri.parse(widget.videoUrl),
-      );
+  void _disposeController() {
+    _controller?.removeListener(_listener);
+    _controller?.dispose();
+    _controller = null;
+    _isInitialized = false;
+    _isPlaying = false;
+  }
 
-      await _controller!.initialize();
-      
-      _controller!.setLooping(true);
-      
+  void _initializeVideo() async {
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    await _controller!.initialize();
+
+    _listener = () {
       if (mounted) {
         setState(() {
-          _isInitialized = true;
+          _isPlaying = _controller!.value.isPlaying;
         });
       }
+    };
 
-      _controller!.addListener(() {
-        if (mounted) {
-          setState(() {
-            _isPlaying = _controller!.value.isPlaying;
-          });
-        }
-      });
-    } catch (e) {
-      debugPrint('Video initialization error: $e');
-      if (mounted) {
-        setState(() {
-          _hasError = true;
-        });
-      }
+    _controller!.addListener(_listener);
+    _controller!.setLooping(true);
+
+    if (mounted) {
+      setState(() => _isInitialized = true);
     }
   }
 
@@ -74,31 +76,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         _controller!.play();
       }
     });
-  }
-
-  void _handleVisibilityChanged(VisibilityInfo info) {
-    if (!widget.autoPlay || _controller == null || !_isInitialized) return;
-
-    // Auto-play when 70% visible for 5 seconds
-    if (info.visibleFraction >= 0.7) {
-      if (!_shouldAutoPlay) {
-        _shouldAutoPlay = true;
-        // Start auto-play after 5 seconds of visibility
-        Future.delayed(const Duration(seconds: 5), () {
-          if (_shouldAutoPlay && mounted && _isInitialized) {
-            _controller?.play();
-          }
-        });
-      }
-    } else {
-      // Pause when less than 50% visible
-      if (info.visibleFraction < 0.5) {
-        _shouldAutoPlay = false;
-        if (_controller?.value.isPlaying == true) {
-          _controller?.pause();
-        }
-      }
-    }
   }
 
   @override
@@ -159,11 +136,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
           // Loading indicator
           if (!_isInitialized && !_hasError)
-            const Center(
-              child: CircularProgressIndicator(
-                color: Colors.white,
-              ),
-            ),
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
 
           // Error message
           if (_hasError)
@@ -242,12 +215,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
                       ? Icons.volume_up
                       : Icons.volume_off,
                   color: Colors.white,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black54,
-                      blurRadius: 8,
-                    ),
-                  ],
+                  shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
                 ),
               ),
             ),

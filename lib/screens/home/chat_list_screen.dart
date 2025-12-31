@@ -17,22 +17,32 @@ class ChatListScreen extends StatefulWidget {
 }
 
 class _ChatListScreenState extends State<ChatListScreen> {
+  // Store the bloc reference to avoid context access issues
+  late final ChatBloc _chatBloc;
+
   @override
   void initState() {
     super.initState();
-    context.read<ChatBloc>().add(const ChatLoadChats());
+    // Get bloc reference once in initState
+    _chatBloc = context.read<ChatBloc>();
+    
+    // Only load if we don't have chats already
+    final currentState = _chatBloc.state;
+    if (currentState is! ChatChatsLoaded) {
+      _chatBloc.add(const ChatLoadChats());
+    }
   }
 
   Future<void> _onRefresh() async {
-    context.read<ChatBloc>().add(const ChatLoadChats());
+    if (mounted) {
+      _chatBloc.add(const ChatLoadChats());
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Messages'),
-      ),
+      appBar: AppBar(title: const Text('Messages')),
       body: BlocBuilder<AuthBloc, AuthState>(
         builder: (context, authState) {
           if (authState is! AuthAuthenticated) {
@@ -45,7 +55,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
             onRefresh: _onRefresh,
             child: BlocBuilder<ChatBloc, ChatState>(
               builder: (context, state) {
-                if (state is ChatLoading) {
+                // Handle initial and loading states together
+                if (state is ChatLoading || state is ChatInitial) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
@@ -108,7 +119,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     itemBuilder: (context, index) {
                       final chat = state.chats[index];
                       final otherUser = chat.getOtherUser(currentUserId);
-                      final unreadCount = chat.getUnreadCountForUser(currentUserId);
+                      final unreadCount = chat.getUnreadCountForUser(
+                        currentUserId,
+                      );
 
                       return ListTile(
                         leading: CircleAvatar(
@@ -170,23 +183,34 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             ],
                           ],
                         ),
-                        onTap: () {
-                          Navigator.push(
+                        onTap: () async {
+                          // Navigate and wait for result
+                          await Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => ChatScreen(
-                                userId: otherUser.id,
-                                chatId: chat.id,
+                              builder: (_) => BlocProvider.value(
+                                value: _chatBloc,
+                                child: ChatScreen(
+                                  userId: otherUser.id,
+                                  chatId: chat.id,
+                                ),
                               ),
                             ),
                           );
+
+                          // Refresh chat list when coming back
+                          // Use the stored bloc reference instead of context.read
+                          if (mounted) {
+                            _chatBloc.add(const ChatLoadChats());
+                          }
                         },
                       );
                     },
                   );
                 }
 
-                return const Center(child: Text('Something went wrong'));
+                // Fallback - show loading instead of error
+                return const Center(child: CircularProgressIndicator());
               },
             ),
           );

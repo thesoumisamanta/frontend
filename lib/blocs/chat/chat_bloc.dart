@@ -17,12 +17,20 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     on<ChatAddMessage>(_onChatAddMessage);
   }
 
+  List<ChatModel> _chatsCache = [];
+
   Future<void> _onChatLoadChats(
     ChatLoadChats event,
     Emitter<ChatState> emit,
   ) async {
     try {
-      emit(ChatLoading());
+      // If we have cached chats, show them immediately
+      if (_chatsCache.isNotEmpty) {
+        emit(ChatChatsLoaded(_chatsCache));
+      } else {
+        // Only show loading if we don't have cache
+        emit(ChatLoading());
+      }
 
       final response = await apiService.getChats();
 
@@ -32,12 +40,20 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
             .map((json) => ChatModel.fromJson(json))
             .toList();
 
+        // Update cache
+        _chatsCache = chats;
         emit(ChatChatsLoaded(chats));
       } else {
-        emit(ChatError(response['message'] ?? 'Failed to load chats'));
+        // If we have cache, don't show error - keep showing cached data
+        if (_chatsCache.isEmpty) {
+          emit(ChatError(response['message'] ?? 'Failed to load chats'));
+        }
       }
     } catch (e) {
-      emit(ChatError(e.toString()));
+      // If we have cache, don't show error - keep showing cached data
+      if (_chatsCache.isEmpty) {
+        emit(ChatError(e.toString()));
+      }
     }
   }
 
@@ -66,19 +82,23 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     Emitter<ChatState> emit,
   ) async {
     try {
-      if (event.refresh) {
-        emit(ChatLoading());
-      }
-
       final currentState = state;
       int page = 1;
       List<MessageModel> currentMessages = [];
 
-      if (currentState is ChatMessagesLoaded && 
-          currentState.chatId == event.chatId && 
+      // Determine page and current messages
+      if (currentState is ChatMessagesLoaded &&
+          currentState.chatId == event.chatId &&
           !event.refresh) {
         page = currentState.currentPage + 1;
         currentMessages = currentState.messages;
+        // Don't emit loading for pagination
+      } else if (event.refresh && currentState is ChatMessagesLoaded) {
+        // Keep showing current messages while refreshing
+        currentMessages = currentState.messages;
+      } else {
+        // Show loading only for initial load
+        emit(ChatLoading());
       }
 
       final response = await apiService.getMessages(
@@ -93,17 +113,19 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
             .map((json) => MessageModel.fromJson(json))
             .toList();
 
-        final allMessages = event.refresh 
-            ? newMessages 
+        final allMessages = event.refresh
+            ? newMessages
             : [...newMessages, ...currentMessages];
         final hasMore = page < response['totalPages'];
 
-        emit(ChatMessagesLoaded(
-          chatId: event.chatId,
-          messages: allMessages,
-          hasMore: hasMore,
-          currentPage: page,
-        ));
+        emit(
+          ChatMessagesLoaded(
+            chatId: event.chatId,
+            messages: allMessages,
+            hasMore: hasMore,
+            currentPage: page,
+          ),
+        );
       } else {
         emit(ChatError(response['message'] ?? 'Failed to load messages'));
       }
@@ -118,7 +140,6 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   ) async {
     try {
       final currentState = state;
-      emit(ChatMessageSending());
 
       final response = await apiService.sendMessage(
         chatId: event.chatId,
@@ -129,9 +150,9 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
 
       if (response['success'] == true) {
         final message = MessageModel.fromJson(response['message']);
-        
+
         // Add the new message to the current state
-        if (currentState is ChatMessagesLoaded && 
+        if (currentState is ChatMessagesLoaded &&
             currentState.chatId == event.chatId) {
           final updatedMessages = [...currentState.messages, message];
           emit(currentState.copyWith(messages: updatedMessages));
@@ -139,10 +160,37 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
           emit(ChatMessageSent(message));
         }
       } else {
-        emit(ChatError(response['message'] ?? 'Failed to send message'));
+        final String errorMessage =
+            response['message'] ?? 'Failed to send message';
+
+        // Check for Firebase errors (non-critical)
+        if (errorMessage.contains('Firebase') ||
+            errorMessage.contains('default Firebase app')) {
+          // Message likely saved, just notification failed
+          // Trigger a silent reload to sync
+          add(ChatLoadMessages(chatId: event.chatId, refresh: true));
+          return;
+        }
+
+        emit(ChatError(errorMessage));
+        
+        // Restore previous state after brief delay
+        await Future.delayed(const Duration(seconds: 2));
+        if (currentState is ChatMessagesLoaded) {
+          emit(currentState);
+        }
       }
     } catch (e) {
+      print('Send message error in bloc: $e');
+      
+      final currentState = state;
       emit(ChatError(e.toString()));
+
+      // Restore previous state after error
+      await Future.delayed(const Duration(seconds: 2));
+      if (currentState is ChatMessagesLoaded) {
+        emit(currentState);
+      }
     }
   }
 
@@ -152,10 +200,10 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   ) async {
     try {
       await apiService.markMessagesAsRead(event.chatId);
-      // emit(ChatMarkedAsRead(event.chatId));
+      // Don't emit any state here - this is a fire-and-forget operation
     } catch (e) {
-      // Silently fail
       print('Error marking messages as read: $e');
+      // Silently fail - not critical
     }
   }
 
@@ -164,8 +212,8 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     Emitter<ChatState> emit,
   ) async {
     final currentState = state;
-    
-    if (currentState is ChatMessagesLoaded && 
+
+    if (currentState is ChatMessagesLoaded &&
         currentState.chatId == event.chatId) {
       final message = MessageModel.fromJson(event.message);
       final updatedMessages = [...currentState.messages, message];

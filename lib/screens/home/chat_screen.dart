@@ -25,6 +25,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   String? _currentChatId;
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -71,9 +72,11 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _sendMessage() {
-    if (_messageController.text.trim().isEmpty || _currentChatId == null) {
+    if (_messageController.text.trim().isEmpty || _currentChatId == null || _isSending) {
       return;
     }
+
+    setState(() => _isSending = true);
 
     context.read<ChatBloc>().add(
           ChatSendMessage(
@@ -83,16 +86,28 @@ class _ChatScreenState extends State<ChatScreen> {
         );
 
     _messageController.clear();
+    
+    // Reset sending state after a brief delay
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() => _isSending = false);
+      }
+    });
+    
     _scrollToBottom();
   }
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
     }
   }
 
@@ -131,12 +146,25 @@ class _ChatScreenState extends State<ChatScreen> {
                 }
               } else if (state is ChatError) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(state.message)),
+                  SnackBar(
+                    content: Text(state.message),
+                    action: SnackBarAction(
+                      label: 'Retry',
+                      onPressed: () {
+                        if (_currentChatId != null) {
+                          _loadMessages();
+                        } else {
+                          _getOrCreateChat();
+                        }
+                      },
+                    ),
+                  ),
                 );
               }
             },
             builder: (context, state) {
-              if (state is ChatLoading) {
+              // Handle initial and loading states together
+              if (state is ChatLoading || state is ChatInitial) {
                 return const Center(child: CircularProgressIndicator());
               }
 
@@ -206,15 +234,24 @@ class _ChatScreenState extends State<ChatScreen> {
                                 ),
                                 maxLines: 5,
                                 minLines: 1,
+                                enabled: !_isSending,
                               ),
                             ),
                             const SizedBox(width: 8),
                             IconButton(
-                              onPressed: _sendMessage,
-                              icon: Icon(
-                                Icons.send,
-                                color: Theme.of(context).primaryColor,
-                              ),
+                              onPressed: _isSending ? null : _sendMessage,
+                              icon: _isSending
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.send,
+                                      color: Theme.of(context).primaryColor,
+                                    ),
                             ),
                           ],
                         ),
@@ -224,7 +261,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 );
               }
 
-              return const Center(child: Text('Something went wrong'));
+              // Show loading indicator for any unknown state
+              return const Center(child: CircularProgressIndicator());
             },
           ),
         );

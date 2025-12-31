@@ -25,16 +25,24 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   String? _replyingToCommentId;
   String? _replyingToUsername;
+  
+  // Store bloc references
+  late final PostBloc _postBloc;
+  late final CommentBloc _commentBloc;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    
+    // Get bloc references
+    _postBloc = context.read<PostBloc>();
+    _commentBloc = context.read<CommentBloc>();
 
     // Load data using BLoCs
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<PostBloc>().add(PostLoadSingle(widget.postId));
-      context.read<CommentBloc>().add(
+      _postBloc.add(PostLoadSingle(widget.postId));
+      _commentBloc.add(
         CommentLoadPostComments(postId: widget.postId, refresh: true),
       );
     });
@@ -51,9 +59,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent * 0.9) {
-      final state = context.read<CommentBloc>().state;
+      final state = _commentBloc.state;
       if (state is CommentPostCommentsLoaded && state.hasMore) {
-        context.read<CommentBloc>().add(
+        _commentBloc.add(
           CommentLoadPostComments(postId: widget.postId),
         );
       }
@@ -78,7 +86,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   void _addComment() {
     if (_commentController.text.trim().isEmpty) return;
 
-    context.read<CommentBloc>().add(
+    _commentBloc.add(
       CommentCreate(
         postId: widget.postId,
         text: _commentController.text.trim(),
@@ -104,9 +112,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.arrow_back),
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12.0),
-                child: const Text('Post'),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12.0),
+                child: Text('Post'),
               ),
             ],
           ),
@@ -118,6 +126,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         children: [
           // Post - Using BLoC now
           BlocBuilder<PostBloc, PostState>(
+            bloc: _postBloc,
             builder: (context, state) {
               if (state is PostLoading) {
                 return const Center(
@@ -149,9 +158,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: () {
-                            context.read<PostBloc>().add(
-                              PostLoadSingle(widget.postId),
-                            );
+                            _postBloc.add(PostLoadSingle(widget.postId));
                           },
                           child: const Text('Retry'),
                         ),
@@ -170,24 +177,25 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           // Comments
           Expanded(
             child: BlocConsumer<CommentBloc, CommentState>(
+              bloc: _commentBloc,
               listener: (context, state) {
                 if (state is CommentCreated) {
-                  context.read<CommentBloc>().add(
+                  _commentBloc.add(
                     CommentLoadPostComments(
                       postId: widget.postId,
                       refresh: true,
                     ),
                   );
                 } else if (state is CommentError) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(state.message)));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(state.message)),
+                  );
                 } else if (state is CommentActionSuccess) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(state.message)));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(state.message)),
+                  );
                   // Refresh comments after action
-                  context.read<CommentBloc>().add(
+                  _commentBloc.add(
                     CommentLoadPostComments(
                       postId: widget.postId,
                       refresh: true,
@@ -198,7 +206,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               buildWhen: (previous, current) {
                 // Only rebuild when CommentPostCommentsLoaded changes
                 // Ignore CommentRepliesLoaded to prevent hiding comments
-                return current is CommentLoading || current is CommentPostCommentsLoaded;
+                return current is CommentLoading ||
+                    current is CommentPostCommentsLoaded;
               },
               builder: (context, state) {
                 if (state is CommentLoading) {
@@ -234,7 +243,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   return ListView.builder(
                     controller: _scrollController,
                     itemCount: state.comments.length + 1,
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 10,
+                    ),
                     itemBuilder: (context, index) {
                       if (index == state.comments.length) {
                         return state.hasMore
@@ -342,6 +354,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   ),
                   const SizedBox(width: 8),
                   BlocBuilder<CommentBloc, CommentState>(
+                    bloc: _commentBloc,
                     builder: (context, state) {
                       final isCreating = state is CommentCreating;
                       return IconButton(

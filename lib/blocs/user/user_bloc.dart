@@ -16,12 +16,33 @@ class UserBloc extends Bloc<UserEvent, UserState> {
     on<UserLoadFollowing>(_onUserLoadFollowing);
   }
 
+  UserProfileLoaded? _lastProfileLoadedState;
+
   Future<void> _onUserLoadProfile(
     UserLoadProfile event,
     Emitter<UserState> emit,
   ) async {
     try {
-      emit(UserLoading());
+      // If we already have this user cached, show it immediately
+      if (_lastProfileLoadedState != null &&
+          _lastProfileLoadedState!.user.id == event.userId) {
+        emit(_lastProfileLoadedState!);
+      }
+
+      // If we are already currently showing this user in the active state,
+      // don't emit loading.
+      final currentState = state;
+      bool isRefreshing = false;
+
+      if (currentState is UserProfileLoaded &&
+          currentState.user.id == event.userId) {
+        // We are already showing this user. Do NOT emit UserLoading.
+        isRefreshing = true;
+      } else if (_lastProfileLoadedState == null ||
+          _lastProfileLoadedState!.user.id != event.userId) {
+        // Only emit loading if we didn't just restore from cache above
+        emit(UserLoading());
+      }
 
       final response = await apiService.getUserProfile(event.userId);
 
@@ -29,16 +50,40 @@ class UserBloc extends Bloc<UserEvent, UserState> {
         final user = UserModel.fromJson(response['user']);
         final isFollowing = response['isFollowing'] ?? false;
 
-        emit(UserProfileLoaded(user: user, isFollowing: isFollowing));
+        final newState = UserProfileLoaded(
+          user: user,
+          isFollowing: isFollowing,
+        );
+        _lastProfileLoadedState = newState; // Update cache
+        emit(newState);
       } else {
-        emit(UserError(response['message'] ?? 'Failed to load profile'));
+        // If we were refreshing, we might not want to replace the whole screen with an error
+        // effectively hiding valuable content.
+        if (isRefreshing ||
+            (_lastProfileLoadedState != null &&
+                _lastProfileLoadedState!.user.id == event.userId)) {
+          // Maybe emit a side-effect or just ignore?
+          // For now, if we fail to refresh, we just stay in Loaded state.
+          // We could add a "toast" event, but that requires state change.
+          // Let's just NOT emit Error if we have data.
+          // Or print to log.
+          print('Failed to refresh profile: ${response['message']}');
+        } else {
+          emit(UserError(response['message'] ?? 'Failed to load profile'));
+        }
       }
     } catch (e) {
-      emit(UserError(e.toString()));
+      if ((state is UserProfileLoaded &&
+              (state as UserProfileLoaded).user.id == event.userId) ||
+          (_lastProfileLoadedState != null &&
+              _lastProfileLoadedState!.user.id == event.userId)) {
+        print('Error refreshing profile: $e');
+      } else {
+        emit(UserError(e.toString()));
+      }
     }
   }
 
-  // blocs/user/user_bloc.dart
   Future<void> _onUserUpdateProfile(
     UserUpdateProfile event,
     Emitter<UserState> emit,
@@ -176,7 +221,10 @@ class UserBloc extends Bloc<UserEvent, UserState> {
     Emitter<UserState> emit,
   ) async {
     try {
-      emit(UserLoading());
+      // Only show loading if we don't already have followers loaded
+      if (state is! UserFollowersLoaded) {
+        emit(UserLoading());
+      }
 
       final response = await apiService.getFollowers(event.userId);
 
@@ -200,7 +248,10 @@ class UserBloc extends Bloc<UserEvent, UserState> {
     Emitter<UserState> emit,
   ) async {
     try {
-      emit(UserLoading());
+      // Only show loading if we don't already have following loaded
+      if (state is! UserFollowingLoaded) {
+        emit(UserLoading());
+      }
 
       final response = await apiService.getFollowing(event.userId);
 

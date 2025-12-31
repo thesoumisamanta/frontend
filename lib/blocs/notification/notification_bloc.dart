@@ -19,11 +19,26 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
     Emitter<NotificationState> emit,
   ) async {
     try {
-      if (event.refresh) {
+      final currentState = state;
+      bool isSlientRefresh = false;
+
+      // Only emit loading if we don't have content, OR if it's an explicit full reload.
+      // If we are refreshing but have content, we might want to keep showing it?
+      // But standard pull-to-refresh usually handles its own loading state locally?
+      // No, usually Bloc emits Loading, causing UI updates.
+      // To implement "Silent Refresh" (keep data, show loading, update data, or fail silently):
+
+      if (currentState is NotificationLoaded && event.refresh) {
+        // We have data, and we are refreshing.
+        // Do NOT emit NotificationLoading if you want to keep data visible.
+        // BUT, we need to know we are loading.
+        // Since we don't have a "NotificationRefreshing" state, we just don't emit Loading.
+        isSlientRefresh = true;
+      } else if (currentState is! NotificationLoaded) {
         emit(NotificationLoading());
       }
+      // If none of above (e.g. pagination load), we handle it below (we don't emit Loading for pagination typically, checks are inside)
 
-      final currentState = state;
       int page = 1;
       List<NotificationModel> currentNotifications = [];
 
@@ -32,10 +47,7 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
         currentNotifications = currentState.notifications;
       }
 
-      final response = await apiService.getNotifications(
-        page: page,
-        limit: 20,
-      );
+      final response = await apiService.getNotifications(page: page, limit: 20);
 
       if (response['success'] == true) {
         final List<dynamic> notificationsJson = response['notifications'];
@@ -49,18 +61,32 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
         final hasMore = page < response['totalPages'];
         final unreadCount = response['unreadCount'] ?? 0;
 
-        emit(NotificationLoaded(
-          notifications: allNotifications,
-          unreadCount: unreadCount,
-          hasMore: hasMore,
-          currentPage: page,
-        ));
+        emit(
+          NotificationLoaded(
+            notifications: allNotifications,
+            unreadCount: unreadCount,
+            hasMore: hasMore,
+            currentPage: page,
+          ),
+        );
       } else {
-        emit(NotificationError(
-            response['message'] ?? 'Failed to load notifications'));
+        if (isSlientRefresh) {
+          // Don't blow up the UI if refresh failed
+          print('Failed to refresh notifications: ${response['message']}');
+        } else {
+          emit(
+            NotificationError(
+              response['message'] ?? 'Failed to load notifications',
+            ),
+          );
+        }
       }
     } catch (e) {
-      emit(NotificationError(e.toString()));
+      if (state is NotificationLoaded) {
+        print('Error refreshing notifications: $e');
+      } else {
+        emit(NotificationError(e.toString()));
+      }
     }
   }
 
@@ -95,10 +121,12 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
             ? currentState.unreadCount - 1
             : 0;
 
-        emit(currentState.copyWith(
-          notifications: updatedNotifications,
-          unreadCount: newUnreadCount,
-        ));
+        emit(
+          currentState.copyWith(
+            notifications: updatedNotifications,
+            unreadCount: newUnreadCount,
+          ),
+        );
       }
 
       emit(NotificationMarkedAsRead(event.notificationId));
@@ -131,10 +159,12 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
           );
         }).toList();
 
-        emit(currentState.copyWith(
-          notifications: updatedNotifications,
-          unreadCount: 0,
-        ));
+        emit(
+          currentState.copyWith(
+            notifications: updatedNotifications,
+            unreadCount: 0,
+          ),
+        );
       }
 
       emit(NotificationAllMarkedAsRead());
@@ -151,12 +181,17 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
 
     if (currentState is NotificationLoaded) {
       final notification = NotificationModel.fromJson(event.notification);
-      final updatedNotifications = [notification, ...currentState.notifications];
+      final updatedNotifications = [
+        notification,
+        ...currentState.notifications,
+      ];
 
-      emit(currentState.copyWith(
-        notifications: updatedNotifications,
-        unreadCount: currentState.unreadCount + 1,
-      ));
+      emit(
+        currentState.copyWith(
+          notifications: updatedNotifications,
+          unreadCount: currentState.unreadCount + 1,
+        ),
+      );
     }
   }
 }

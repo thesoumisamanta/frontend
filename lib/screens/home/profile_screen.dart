@@ -32,13 +32,23 @@ class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   File? _profileImage;
+  
+  // Store bloc references
+  late final UserBloc _userBloc;
+  late final PostBloc _postBloc;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    context.read<UserBloc>().add(UserLoadProfile(widget.userId));
-    context.read<PostBloc>().add(
+    
+    // Get bloc references
+    _userBloc = context.read<UserBloc>();
+    _postBloc = context.read<PostBloc>();
+    
+    // Load profile and posts
+    _userBloc.add(UserLoadProfile(widget.userId));
+    _postBloc.add(
       PostLoadUserPosts(userId: widget.userId, refresh: true),
     );
   }
@@ -50,7 +60,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   void _handleFollowToggle() {
-    context.read<UserBloc>().add(UserFollowToggle(widget.userId));
+    _userBloc.add(UserFollowToggle(widget.userId));
   }
 
   void _handleLogout() {
@@ -86,7 +96,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
       // Immediately update profile picture on backend
       final data = <String, dynamic>{};
-      context.read<UserBloc>().add(
+      _userBloc.add(
         UserUpdateProfile(data, profileImage: image),
       );
     }
@@ -108,6 +118,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         return Scaffold(
           appBar: AppBar(
             title: BlocBuilder<UserBloc, UserState>(
+              bloc: _userBloc,
               builder: (context, state) {
                 if (state is UserProfileLoaded) {
                   return Text(state.user.username);
@@ -139,8 +150,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             ],
           ),
           body: BlocBuilder<UserBloc, UserState>(
+            bloc: _userBloc,
             builder: (context, state) {
-              if (state is UserLoading) {
+              // Handle initial and loading states together
+              if (state is UserLoading || state is UserInitial) {
                 return const Center(child: CircularProgressIndicator());
               }
 
@@ -149,11 +162,25 @@ class _ProfileScreenState extends State<ProfileScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(state.message),
+                      Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.message,
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: () {
-                          context.read<UserBloc>().add(
-                            UserLoadProfile(widget.userId),
+                          _userBloc.add(UserLoadProfile(widget.userId));
+                          _postBloc.add(
+                            PostLoadUserPosts(
+                              userId: widget.userId,
+                              refresh: true,
+                            ),
                           );
                         },
                         child: const Text('Retry'),
@@ -168,10 +195,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                 return RefreshIndicator(
                   onRefresh: () async {
-                    context.read<UserBloc>().add(
-                      UserLoadProfile(widget.userId),
-                    );
-                    context.read<PostBloc>().add(
+                    _userBloc.add(UserLoadProfile(widget.userId));
+                    _postBloc.add(
                       PostLoadUserPosts(userId: widget.userId, refresh: true),
                     );
                   },
@@ -183,7 +208,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                           children: [
                             const SizedBox(height: 16),
 
-                            // FIXED: Restructured to ensure proper touch detection
                             Column(
                               children: [
                                 // Cover Photo Section
@@ -206,7 +230,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                         color: Colors.grey[200],
                                       ),
 
-                                // Profile Picture Section (outside of Stack for proper touch)
+                                // Profile Picture Section
                                 Transform.translate(
                                   offset: const Offset(0, -50),
                                   child: Padding(
@@ -259,7 +283,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                 ),
                                               ),
 
-                                              // Camera Icon - Now properly clickable
+                                              // Camera Icon
                                               if (isOwnProfile)
                                                 Positioned(
                                                   bottom: 0,
@@ -345,19 +369,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                                                                   ),
                                                             ),
                                                           ).then((updated) {
-                                                            // Refresh profile if updated
                                                             if (updated ==
                                                                 true) {
-                                                              context
-                                                                  .read<
-                                                                    UserBloc
-                                                                  >()
-                                                                  .add(
-                                                                    UserLoadProfile(
-                                                                      widget
-                                                                          .userId,
-                                                                    ),
-                                                                  );
+                                                              _userBloc.add(
+                                                                UserLoadProfile(
+                                                                  widget.userId,
+                                                                ),
+                                                              );
                                                             }
                                                           });
                                                         },
@@ -431,7 +449,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                                           initialTab: 0,
                                         ),
                                       ),
-                                    );
+                                    ).then((_) {
+                                      if (mounted) {
+                                        _userBloc.add(
+                                          UserLoadProfile(widget.userId),
+                                        );
+                                      }
+                                    });
                                   },
                                   child: _buildStatColumn(
                                     user.followersCount.toString(),
@@ -448,7 +472,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                                           initialTab: 1,
                                         ),
                                       ),
-                                    );
+                                    ).then((_) {
+                                      if (mounted) {
+                                        _userBloc.add(
+                                          UserLoadProfile(widget.userId),
+                                        );
+                                      }
+                                    });
                                   },
                                   child: _buildStatColumn(
                                     user.followingCount.toString(),
@@ -530,6 +560,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                       // Tab Content
                       BlocBuilder<PostBloc, PostState>(
+                        bloc: _postBloc,
                         builder: (context, postState) {
                           if (postState is PostUserPostsLoaded &&
                               postState.userId == widget.userId) {
@@ -548,7 +579,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 );
               }
 
-              return const Center(child: Text('Something went wrong'));
+              return const Center(child: CircularProgressIndicator());
             },
           ),
         );
