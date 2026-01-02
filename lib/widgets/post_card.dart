@@ -21,36 +21,6 @@ class PostCard extends StatelessWidget {
 
   const PostCard({super.key, required this.post, this.showComments = true});
 
-  void _navigateToPostDetail(BuildContext context) {
-    // Force all videos to update their visibility (this will pause/dispose them)
-    VisibilityDetectorController.instance.notifyNow();
-    
-    // Small delay to ensure cleanup happens
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (context.mounted) {
-        // Get bloc references
-        final postBloc = context.read<PostBloc>();
-        final commentBloc = context.read<CommentBloc>();
-        
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MultiBlocProvider(
-              providers: [
-                BlocProvider.value(value: postBloc),
-                BlocProvider.value(value: commentBloc),
-              ],
-              child: PostDetailScreen(postId: post.id),
-            ),
-          ),
-        ).then((_) {
-          // When returning, trigger visibility update again
-          VisibilityDetectorController.instance.notifyNow();
-        });
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = context.read<AuthBloc>().state;
@@ -66,87 +36,120 @@ class PostCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Header
-        ListTile(
-          leading: GestureDetector(
-            onTap: () {
-              final userBloc = context.read<UserBloc>();
-              final postBloc = context.read<PostBloc>();
-              
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => MultiBlocProvider(
-                    providers: [
-                      BlocProvider.value(value: userBloc),
-                      BlocProvider.value(value: postBloc),
-                    ],
-                    child: ProfileScreen(userId: post.user.id),
+        // Header
+        Padding(
+          padding: const EdgeInsets.only(left: 12.0),
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  final userBloc = context.read<UserBloc>();
+                  final postBloc = context.read<PostBloc>();
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MultiBlocProvider(
+                        providers: [
+                          BlocProvider.value(value: userBloc),
+                          BlocProvider.value(value: postBloc),
+                        ],
+                        child: ProfileScreen(userId: post.user.id),
+                      ),
+                    ),
+                  );
+                },
+                child: CircleAvatar(
+                  backgroundImage: CachedImageProvider(
+                    post.user.profilePicture.url,
                   ),
                 ),
-              );
-            },
-            child: CircleAvatar(
-              backgroundImage: CachedImageProvider(
-                post.user.profilePicture.url,
               ),
-            ),
-          ),
-          title: Row(
-            children: [
-              Text(
-                post.user.username,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              if (post.user.isVerified) ...[
-                const SizedBox(width: 4),
-                const Icon(Icons.verified, size: 16, color: Colors.blue),
-              ],
-            ],
-          ),
-          subtitle: Row(
-            children: [
-              Text(timeago.format(post.createdAt)),
-              if (post.location.isNotEmpty) ...[
-                const Text(' • '),
-                const Icon(Icons.location_on, size: 12),
-                Flexible(
-                  child: Text(post.location, overflow: TextOverflow.ellipsis),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          post.user.username,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        if (post.user.isVerified) ...[
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.verified,
+                            size: 16,
+                            color: Colors.blue,
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Text(
+                          _formatTime(post.createdAt),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        if (post.location.isNotEmpty) ...[
+                          const Text(' • ', style: TextStyle(fontSize: 12)),
+                          const Icon(Icons.location_on, size: 12),
+                          const SizedBox(width: 2),
+                          Flexible(
+                            child: Text(
+                              post.location,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.more_vert),
+                onPressed: () {
+                  _showPostOptions(context);
+                },
+              ),
             ],
-          ),
-          trailing: IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: () {
-              _showPostOptions(context);
-            },
           ),
         ),
 
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Text(
+            post.caption,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ),
+        SizedBox(height: post.caption.isNotEmpty ? 8 : 0),
+
         // Media
         if (post.media.isNotEmpty)
-          GestureDetector(
-            onTap: () => _navigateToPostDetail(context),
-            child: SizedBox(
-              height: 400,
-              child: PageView.builder(
-                itemCount: post.media.length,
-                padEnds: false,
-                physics: const PageScrollPhysics(),
-                itemBuilder: (context, index) {
-                  final media = post.media[index];
-                  if (media.type == 'image') {
-                    return CachedImage(imageUrl: media.url, fit: BoxFit.cover);
-                  } else {
-                    // Video - will only initialize when visible
-                    return VideoPlayerWidget(
-                      videoUrl: media.url,
-                      thumbnail: media.thumbnail,
-                      autoPlay: false, // Changed to false - user must tap to play
-                    );
-                  }
-                },
-              ),
+          SizedBox(
+            height: 400,
+            child: PageView.builder(
+              itemCount: post.media.length,
+              padEnds: false,
+              physics: const PageScrollPhysics(),
+              itemBuilder: (context, index) {
+                final media = post.media[index];
+                if (media.type == 'image') {
+                  return CachedImage(imageUrl: media.url, fit: BoxFit.cover);
+                } else {
+                  // Video - will only initialize when visible
+                  return VideoPlayerWidget(
+                    videoUrl: media.url,
+                    thumbnail: media.thumbnail,
+                    autoPlay: false, // Changed to false - user must tap to play
+                  );
+                }
+              },
             ),
           ),
 
@@ -198,29 +201,8 @@ class PostCard extends StatelessWidget {
                   ),
                 ],
               ),
-              
+
               // Caption
-              if (post.caption.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 8.0,
-                  ),
-                  child: RichText(
-                    text: TextSpan(
-                      style: TextStyle(
-                        color: Theme.of(context).textTheme.bodyLarge?.color,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: '${post.user.username} ',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        TextSpan(text: post.caption),
-                      ],
-                    ),
-                  ),
-                ),
             ],
           ),
         ),
@@ -328,5 +310,26 @@ class PostCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inSeconds < 60) {
+      return '${difference.inSeconds}s';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d';
+    } else if (difference.inDays < 30) {
+      return '${(difference.inDays / 7).floor()}w';
+    } else if (difference.inDays < 365) {
+      return '${(difference.inDays / 30).floor()}month';
+    } else {
+      return '${(difference.inDays / 365).floor()}year';
+    }
   }
 }
