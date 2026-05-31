@@ -1,13 +1,10 @@
+import 'package:travel_diary_network/network.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-class SecureStorageService {
+class SecureStorageService implements NetworkTokenProvider {
   final FlutterSecureStorage _storage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
-    ),
-    iOptions: IOSOptions(
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
 
   // Keys
@@ -115,12 +112,17 @@ class SecureStorageService {
     await _storage.deleteAll();
   }
 
+  @override
+  Future<void> clearTokens() async {
+    await clearAll();
+  }
+
   // Check if user is logged in
   Future<bool> isLoggedIn() async {
     final accessToken = await getAccessToken();
     final refreshToken = await getRefreshToken();
     return (accessToken != null && accessToken.isNotEmpty) ||
-           (refreshToken != null && refreshToken.isNotEmpty);
+        (refreshToken != null && refreshToken.isNotEmpty);
   }
 
   // Get all stored keys (for debugging)

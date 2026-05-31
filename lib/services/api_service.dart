@@ -1,33 +1,67 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:travel_diary_network/network.dart';
 import '../utils/constants.dart';
 import 'secure_storage_service.dart';
-import 'token_interceptor.dart';
 
 class ApiService {
   final SecureStorageService _secureStorage;
+  late final NetworkClient _networkClient;
   late final Dio _dio;
-  late final TokenInterceptor _tokenInterceptor;
 
   ApiService(this._secureStorage) {
-    _dio = Dio(
-      BaseOptions(
+    _networkClient = NetworkClient(
+      config: NetworkConfig(
         baseUrl: AppConstants.apiUrl,
-        connectTimeout: const Duration(seconds: 30), // Reduced from 60
-        receiveTimeout: const Duration(seconds: 30), // Reduced from 60
-        sendTimeout: const Duration(seconds: 30), // Added send timeout
-        headers: {'Content-Type': 'application/json'},
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 30),
+        enableLogging: true,
+        enableConnectivityCheck: true,
+        defaultHeaders: const {'Content-Type': 'application/json'},
+        refreshTokenPath: AppConstants.refreshTokenEndpoint,
+        skipAuthForPaths: const [
+          '/auth/login',
+          '/auth/register',
+          '/auth/refresh-token',
+        ],
+        tokenRefresher:
+            ({required Dio dio, required String? refreshToken}) async {
+              if (refreshToken == null || refreshToken.isEmpty) {
+                return null;
+              }
+
+              final response = await dio.post(
+                AppConstants.refreshTokenEndpoint,
+                options: Options(
+                  headers: {'Cookie': 'refreshToken=$refreshToken'},
+                  extra: {
+                    'suppressLogging': true,
+                    'skipConnectivityCheck': true,
+                  },
+                ),
+              );
+
+              final data = response.data;
+              if (data is Map) {
+                final json = data.cast<String, dynamic>();
+                final accessToken = json['accessToken']?.toString() ?? '';
+                final newRefreshToken = json['refreshToken']?.toString() ?? '';
+
+                if (accessToken.isNotEmpty && newRefreshToken.isNotEmpty) {
+                  return TokenPair(
+                    accessToken: accessToken,
+                    refreshToken: newRefreshToken,
+                  );
+                }
+              }
+
+              return null;
+            },
       ),
+      tokenProvider: _secureStorage,
     );
-
-    // Add token interceptor
-    _tokenInterceptor = TokenInterceptor(_secureStorage, _dio);
-    _dio.interceptors.add(_tokenInterceptor);
-
-    // Add logging interceptor for debugging
-    _dio.interceptors.add(
-      LogInterceptor(requestBody: true, responseBody: true, error: true),
-    );
+    _dio = _networkClient.dio;
   }
 
   // Optimized warm up with shorter timeout and no blocking
@@ -35,23 +69,29 @@ class ApiService {
     try {
       // Use a very short timeout for health check
       // Don't wait for this - let it happen in background
-      await _dio.get(
-        AppConstants.healthEndpoint,
-        options: Options(
-          receiveTimeout: const Duration(seconds: 10), // Shorter timeout for warmup
-          sendTimeout: const Duration(seconds: 10),
-        ),
-      ).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          print('Health check timeout - server may be sleeping');
-          // Return a dummy response to avoid blocking
-          return Response(
-            requestOptions: RequestOptions(path: AppConstants.healthEndpoint),
-            statusCode: 503,
+      await _dio
+          .get(
+            AppConstants.healthEndpoint,
+            options: Options(
+              receiveTimeout: const Duration(
+                seconds: 10,
+              ), // Shorter timeout for warmup
+              sendTimeout: const Duration(seconds: 10),
+            ),
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              print('Health check timeout - server may be sleeping');
+              // Return a dummy response to avoid blocking
+              return Response(
+                requestOptions: RequestOptions(
+                  path: AppConstants.healthEndpoint,
+                ),
+                statusCode: 503,
+              );
+            },
           );
-        },
-      );
     } catch (e) {
       // Silently fail - warmup is not critical
       print('Server warmup failed (non-critical): $e');
@@ -77,7 +117,9 @@ class ApiService {
           'accountType': accountType,
         },
         options: Options(
-          receiveTimeout: const Duration(seconds: 45), // Longer for registration
+          receiveTimeout: const Duration(
+            seconds: 45,
+          ), // Longer for registration
         ),
       );
       return response.data;
@@ -129,9 +171,7 @@ class ApiService {
     try {
       final response = await _dio.get(
         '/auth/logout',
-        options: Options(
-          receiveTimeout: const Duration(seconds: 15),
-        ),
+        options: Options(receiveTimeout: const Duration(seconds: 15)),
       );
       return response.data;
     } catch (e) {
@@ -143,9 +183,7 @@ class ApiService {
     try {
       final response = await _dio.get(
         '/auth/me',
-        options: Options(
-          receiveTimeout: const Duration(seconds: 20),
-        ),
+        options: Options(receiveTimeout: const Duration(seconds: 20)),
       );
       return response.data;
     } catch (e) {
@@ -158,9 +196,7 @@ class ApiService {
       await _dio.put(
         '/auth/fcm-token',
         data: {'fcmToken': fcmToken},
-        options: Options(
-          receiveTimeout: const Duration(seconds: 15),
-        ),
+        options: Options(receiveTimeout: const Duration(seconds: 15)),
       );
     } catch (e) {
       throw _handleError(e);
@@ -427,9 +463,7 @@ class ApiService {
       final response = await _dio.post(
         '/stories',
         data: formData,
-        options: Options(
-          receiveTimeout: const Duration(minutes: 2),
-        ),
+        options: Options(receiveTimeout: const Duration(minutes: 2)),
       );
       return response.data;
     } catch (e) {
@@ -522,9 +556,7 @@ class ApiService {
       final response = await _dio.post(
         '/chats/$chatId/message',
         data: formData,
-        options: Options(
-          receiveTimeout: const Duration(seconds: 45),
-        ),
+        options: Options(receiveTimeout: const Duration(seconds: 45)),
       );
       return response.data;
     } catch (e) {
@@ -624,6 +656,10 @@ class ApiService {
 
   // Error handling
   String _handleError(dynamic error) {
+    if (error is NetworkException) {
+      return error.message;
+    }
+
     if (error is DioException) {
       if (error.response != null) {
         final data = error.response?.data;
@@ -683,9 +719,7 @@ class ApiService {
       final response = await _dio.put(
         '/users/profile',
         data: formData,
-        options: Options(
-          receiveTimeout: const Duration(minutes: 2),
-        ),
+        options: Options(receiveTimeout: const Duration(minutes: 2)),
       );
       return response.data;
     } catch (e) {

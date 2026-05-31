@@ -13,7 +13,7 @@ import 'config/app_environment.dart';
 import 'screens/splash_screen.dart';
 import 'services/api_service.dart';
 import 'services/secure_storage_service.dart';
-import 'utils/theme.dart';
+import 'package:uikit/uikit.dart';
 
 class TravelDiaryApp extends StatelessWidget {
   final SecureStorageService secureStorage;
