@@ -256,22 +256,21 @@ flutter pub get
 3. Download `GoogleService-Info.plist`
 4. Add to `ios/Runner/` via Xcode
 
-### Step 5: Update API URL
+### Step 5: Environment Flavors
 
-Edit `lib/utils/constants.dart`:
+This project now uses dev/prod flavors and a central environment config.
 
-```dart
-// For Android Emulator
-static const String baseUrl = 'http://10.0.2.2:5000';
+Default values:
 
-// For iOS Simulator
-// static const String baseUrl = 'http://localhost:5000';
+- Dev API: `http://10.0.2.2:5000/api`
+- Prod API: `https://backend-r9e6.onrender.com/api`
 
-// For Real Device (replace with your IP)
-// static const String baseUrl = 'http://192.168.1.100:5000';
+You can override them at build time with dart defines:
 
-// For Production
-// static const String baseUrl = 'https://api.yourdomain.com';
+```bash
+--dart-define=API_BASE_URL=https://your-api.example.com/api
+--dart-define=APP_NAME=Travel Diary
+--dart-define=ENABLE_VERBOSE_LOGS=true
 ```
 
 ### Step 6: Run the App
@@ -280,8 +279,14 @@ static const String baseUrl = 'http://10.0.2.2:5000';
 # List available devices
 flutter devices
 
-# Run on specific device
-flutter run -d <device-id>
+# Run development flavor
+flutter run --flavor dev -t lib/main_dev.dart
+
+# Run production flavor
+flutter run --flavor prod -t lib/main_prod.dart
+
+# Run on a specific device with dev flavor
+flutter run -d <device-id> --flavor dev -t lib/main_dev.dart
 
 # Run in release mode
 flutter run --release
@@ -331,26 +336,21 @@ defaultConfig {
 
 ### App Configuration
 
+**File: `lib/config/app_environment.dart`**
+
+The environment layer resolves the active flavor, API base URL, app name, and verbose logging flag.
+
+**File: `lib/main_dev.dart`**
+
+Used for local development and emulator runs.
+
+**File: `lib/main_prod.dart`**
+
+Used for production builds and release testing.
+
 **File: `lib/utils/constants.dart`**
 
-```dart
-class AppConstants {
-  // API Configuration
-  static const String baseUrl = 'YOUR_API_URL';
-  
-  // Token Configuration
-  static const Duration tokenRefreshThreshold = Duration(minutes: 5);
-  
-  // Pagination
-  static const int postsPerPage = 10;
-  static const int commentsPerPage = 20;
-  
-  // Media Limits
-  static const int maxImageSize = 5 * 1024 * 1024; // 5MB
-  static const int maxVideoSize = 100 * 1024 * 1024; // 100MB
-  static const int maxImagesPerPost = 10;
-}
-```
+Still holds shared app constants such as pagination, token timing, and media limits.
 
 ---
 
@@ -625,8 +625,14 @@ blocTest<AuthBloc, AuthState>(
 # Debug APK
 flutter build apk --debug
 
+# Dev flavor APK
+flutter build apk --flavor dev -t lib/main_dev.dart
+
 # Release APK
 flutter build apk --release
+
+# Prod flavor APK
+flutter build apk --flavor prod -t lib/main_prod.dart
 
 # Split APKs by ABI
 flutter build apk --split-per-abi
@@ -639,6 +645,8 @@ flutter build apk --split-per-abi
 ```bash
 flutter build appbundle --release
 
+flutter build appbundle --flavor prod -t lib/main_prod.dart
+
 # Output: build/app/outputs/bundle/release/app-release.aab
 ```
 
@@ -648,8 +656,14 @@ flutter build appbundle --release
 # Debug
 flutter build ios --debug
 
+# Dev flavor
+flutter build ios --flavor dev -t lib/main_dev.dart
+
 # Release
 flutter build ios --release
+
+# Prod flavor
+flutter build ios --flavor prod -t lib/main_prod.dart
 
 # Output: build/ios/iphoneos/Runner.app
 ```

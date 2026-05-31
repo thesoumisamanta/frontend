@@ -1,6 +1,8 @@
+import '../config/app_environment.dart';
+
 class AppConstants {
   // API Endpoints
-  static String get apiUrl => 'https://backend-r9e6.onrender.com/api';
+  static String get apiUrl => AppEnvironment.current.apiBaseUrl;
 
   //warm up endpoint
   static String get healthEndpoint => '$apiUrl/health';

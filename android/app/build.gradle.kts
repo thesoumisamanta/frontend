@@ -13,6 +13,8 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    flavorDimensions += "environment"
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -31,6 +33,18 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    productFlavors {
+        create("dev") {
+            dimension = "environment"
+            resValue("string", "app_name", "Travel Diary Dev")
+        }
+
+        create("prod") {
+            dimension = "environment"
+            resValue("string", "app_name", "Travel Diary")
+        }
     }
 
     buildTypes {
