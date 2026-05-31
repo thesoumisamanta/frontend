@@ -98,11 +98,6 @@ class NotificationService {
     _navigateBasedOnNotification(message.data);
   }
 
-  static void _onNotificationTapped(Map<String, dynamic> payload) {
-    print('Notification tapped: $payload');
-    // Navigate to appropriate screen based on payload
-    _navigateBasedOnNotification(payload);
-  }
 
   static void _navigateBasedOnNotification(Map<String, dynamic> data) {
     // Implement navigation logic based on notification type
